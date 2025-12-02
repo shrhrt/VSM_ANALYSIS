@@ -189,7 +189,7 @@ class VSMApp:
         self.offset_corr_var = tk.BooleanVar(value=True)
         self.show_legend_var = tk.BooleanVar(value=True)
 
-        # 反磁場補正
+        # 反磁性補正
         self.demag_corr_var = tk.BooleanVar(value=True)
         self.manual_slope_var = tk.BooleanVar(value=False)
         self.pos_h_min_var = tk.StringVar(value="1.5")
@@ -337,8 +337,8 @@ class VSMApp:
             frame_basic, text="凡例を表示", variable=self.show_legend_var
         ).grid(row=3, column=0, columnspan=2, sticky="w")
 
-        # 反磁場補正
-        frame_demag = ttk.LabelFrame(parent, text=" 反磁場補正 ", padding="10")
+        # 反磁性補正
+        frame_demag = ttk.LabelFrame(parent, text=" 反磁性補正 ", padding="10")
         frame_demag.pack(fill=tk.X)
 
         ttk.Checkbutton(
@@ -481,7 +481,7 @@ class VSMApp:
         for var in vars_to_trace:
             var.trace_add("write", self._schedule_update)
 
-        # 反磁場補正のUI制御
+        # 反磁性補正のUI制御
         self.demag_corr_var.trace_add("write", lambda *args: self.toggle_demag_fields())
         self.manual_slope_var.trace_add(
             "write", lambda *args: self.toggle_demag_fields()
@@ -494,7 +494,7 @@ class VSMApp:
         self._update_job = self.root.after(300, self.update_graph)
 
     def toggle_demag_fields(self):
-        """反磁場補正の設定に応じて入力欄の有効/無効を切り替え"""
+        """反磁性補正の設定に応じて入力欄の有効/無効を切り替え"""
         enable_demag = self.demag_corr_var.get()
         enable_manual = enable_demag and self.manual_slope_var.get()
 
@@ -668,7 +668,7 @@ class VSMApp:
 
                 print(f"[{i + 1}] {path.name}")
 
-                # 1. 反磁場補正
+                # 1. 反磁性補正
                 slope = 0.0
                 if self.demag_corr_var.get():
                     manual_range = None

@@ -86,7 +86,7 @@ def parse_metadata(file_path):
 
 
 def find_demag_slope_auto(H_data, M_data, segment_ratio=0.15, min_r_squared=0.99):
-    """M-Hカーブ両端から線形性の高い領域を自動検出し、反磁場補正の傾きを計算"""
+    """M-Hカーブ両端から線形性の高い領域を自動検出し、反磁性補正の傾きを計算"""
     df = (
         pd.DataFrame({"H": H_data, "M": M_data})
         .sort_values(by="H")
@@ -308,7 +308,7 @@ def parse_metadata(file_path):
 
 
 def find_demag_slope_auto(H_data, M_data, segment_ratio=0.15, min_r_squared=0.99):
-    """M-Hカーブ両端から線形性の高い領域を自動検出し、反磁場補正の傾きを計算"""
+    """M-Hカーブ両端から線形性の高い領域を自動検出し、反磁性補正の傾きを計算"""
     df = (
         pd.DataFrame({"H": H_data, "M": M_data})
         .sort_values(by="H")
@@ -728,14 +728,14 @@ class VSMApp:
         )
         self.legend_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=(5, 0))
 
-        # 反磁場補正フレーム
-        demag_frame = ttk.LabelFrame(parent, text=" 反磁場補正 ", padding="10")
+        # 反磁性補正フレーム
+        demag_frame = ttk.LabelFrame(parent, text=" 反磁性補正 ", padding="10")
         demag_frame.pack(fill=tk.X, pady=(0, 10))
         demag_frame.grid_columnconfigure(1, weight=1)
 
         self.demag_correction_var = tk.BooleanVar(value=True)
         self.demag_check = ttk.Checkbutton(
-            demag_frame, text="反磁場補正を有効化", variable=self.demag_correction_var
+            demag_frame, text="反磁性補正を有効化", variable=self.demag_correction_var
         )
         self.demag_check.grid(row=0, column=0, columnspan=4, sticky="w")
 
@@ -969,7 +969,7 @@ class VSMApp:
         self._update_job = self.root.after(250, self.update_graph)
 
     def toggle_demag_fields(self):
-        """反磁場補正の有効/無効に応じて、関連ウィジェットの状態を切り替える"""
+        """反磁性補正の有効/無効に応じて、関連ウィジェットの状態を切り替える"""
         state = tk.NORMAL if self.demag_correction_var.get() else tk.DISABLED
         self.manual_check.config(state=state)
         self.toggle_manual_fields()
@@ -1202,7 +1202,7 @@ class VSMApp:
                 print(f"\n--- 解析: {file.stem} (データ点: {len(H_raw)}) ---")
 
                 if self.demag_correction_var.get():
-                    print("  反磁場補正: 有効")
+                    print("  反磁性補正: 有効")
                     if self.manual_slope_var.get():
                         print("    傾き計算: 手動設定モード")
                         try:
@@ -1227,7 +1227,7 @@ class VSMApp:
                         f"    補正傾き S: {slope:.6f}, R^2: [正 {r2_pos:.4f}], [負 {r2_neg:.4f}]"
                     )
                 else:
-                    print("  反磁場補正: 無効")
+                    print("  反磁性補正: 無効")
                     slope = 0
 
                 M_corrected = M_raw - H_raw * slope
