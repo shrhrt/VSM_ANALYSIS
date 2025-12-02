@@ -185,11 +185,13 @@ def calculate_coercivity(H_down, M_down, H_up, M_up):
 
 
 def calculate_saturation_magnetization(H, M, pos_range=None, neg_range=None):
-    """飽和磁化(Ms)を計算"""
+    """飽和磁化(Ms)を計算。手動範囲が指定されていればそれを使用する。"""
     H, M = np.array(H), np.array(M)
     Ms_pos, Ms_neg = 0, 0
 
     if pos_range and neg_range:
+        # Manual range calculation
+        print("    Ms計算: 手動範囲を使用")
         pos_mask = (H >= pos_range[0]) & (H <= pos_range[1])
         neg_mask = (H >= neg_range[0]) & (H <= neg_range[1])
 
@@ -213,6 +215,8 @@ def calculate_saturation_magnetization(H, M, pos_range=None, neg_range=None):
             Ms_neg = np.mean(np.abs(M[neg_mask]))
 
     else:
+        # Automatic range calculation
+        print("    Ms計算: 自動範囲を使用")
         H_max, H_min = np.max(H), np.min(H)
         pos_mask = H > H_max * 0.9
         neg_mask = H < H_min * 0.9

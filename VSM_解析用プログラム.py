@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -9,6 +9,7 @@ import sys
 from contextlib import redirect_stdout
 import io
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from tkinter import TclError
 
 import vsm_analysis_logic as vsm_logic
 
@@ -264,6 +265,137 @@ class VSMApp:
         )
         self.apply_to_all_button.pack(fill=tk.X, pady=(5, 0), padx=5)
 
+        ms_frame = ttk.LabelFrame(parent, text=" 飽和磁化 (Ms) 計算 ", padding="10")
+        ms_frame.pack(fill=tk.X, pady=(0, 10))
+        self.ms_settings_button = ttk.Button(
+            ms_frame,
+            text="計算範囲を手動指定...",
+            command=self._show_ms_settings_window,
+            state=tk.DISABLED,
+        )
+        self.ms_settings_button.pack(fill=tk.X, pady=5)
+
+    def _show_ms_settings_window(self):
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title("飽和磁化(Ms) 計算範囲設定")
+        settings_window.geometry("650x500")
+        settings_window.transient(self.root)
+        settings_window.grab_set()
+
+        main_frame = ttk.Frame(settings_window, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(main_frame, borderwidth=0, background=self.style.lookup(".", "background"), highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas, padding=(0, 0, 10, 0))
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        file_settings_vars = []
+
+        def _toggle_manual_entries(widgets, manual_var):
+            state = tk.NORMAL if manual_var.get() else tk.DISABLED
+            for widget in widgets:
+                widget.config(state=state)
+
+        for i, data in enumerate(self.vsm_data):
+            file_path = data["path"]
+            current_settings = data.get("ms_calc_settings", {})
+
+            manual_var = tk.BooleanVar(value=current_settings.get("manual", False))
+            link_var = tk.BooleanVar(value=current_settings.get("link_ranges", True))
+            pos_min_var = tk.StringVar(value=current_settings.get("pos_range", ("1.5", "2.0"))[0])
+            pos_max_var = tk.StringVar(value=current_settings.get("pos_range", ("1.5", "2.0"))[1])
+            neg_min_var = tk.StringVar(value=current_settings.get("neg_range", ("-2.0", "-1.5"))[0])
+            neg_max_var = tk.StringVar(value=current_settings.get("neg_range", ("-2.0", "-1.5"))[1])
+
+            file_settings_vars.append({
+                "manual": manual_var,
+                "link": link_var,
+                "pos_min": pos_min_var,
+                "pos_max": pos_max_var,
+                "neg_min": neg_min_var,
+                "neg_max": neg_max_var,
+            })
+
+            frame = ttk.LabelFrame(scrollable_frame, text=file_path.name, padding=10)
+            frame.pack(fill=tk.X, expand=True, pady=5)
+            frame.grid_columnconfigure(1, weight=1)
+            frame.grid_columnconfigure(3, weight=1)
+
+            manual_check = ttk.Checkbutton(frame, text="手動範囲で計算", variable=manual_var)
+            manual_check.grid(row=0, column=0, columnspan=2, sticky="w")
+            
+            link_check = ttk.Checkbutton(frame, text="正負の範囲を連動", variable=link_var)
+            link_check.grid(row=0, column=2, columnspan=2, sticky="w")
+
+            pos_min_entry = ttk.Entry(frame, textvariable=pos_min_var, width=7)
+            pos_min_entry.grid(row=1, column=1, sticky="ew", padx=(0,2))
+            ttk.Label(frame, text="～").grid(row=1, column=2)
+            pos_max_entry = ttk.Entry(frame, textvariable=pos_max_var, width=7)
+            pos_max_entry.grid(row=1, column=3, sticky="ew", padx=(2,0))
+            ttk.Label(frame, text=" (正 H)").grid(row=1, column=4, sticky="w")
+            
+            neg_min_entry = ttk.Entry(frame, textvariable=neg_min_var, width=7)
+            neg_min_entry.grid(row=2, column=1, sticky="ew", pady=(5, 0), padx=(0,2))
+            ttk.Label(frame, text="～").grid(row=2, column=2, pady=(5, 0))
+            neg_max_entry = ttk.Entry(frame, textvariable=neg_max_var, width=7)
+            neg_max_entry.grid(row=2, column=3, sticky="ew", pady=(5, 0), padx=(2,0))
+            ttk.Label(frame, text=" (負 H)").grid(row=2, column=4, sticky="w", pady=(5, 0))
+            
+            manual_entries = [pos_min_entry, pos_max_entry, neg_min_entry, neg_max_entry]
+            
+            def on_pos_change(*args, p_min_v=pos_min_var, p_max_v=pos_max_var, n_min_v=neg_min_var, n_max_v=neg_max_var, l_v=link_var):
+                if l_v.get():
+                    try:
+                        p_min = float(p_min_v.get())
+                        n_max_v.set(str(-p_min))
+                    except (ValueError, TclError): pass
+                    try:
+                        p_max = float(p_max_v.get())
+                        n_min_v.set(str(-p_max))
+                    except (ValueError, TclError): pass
+            
+            pos_min_var.trace_add("write", on_pos_change)
+            pos_max_var.trace_add("write", on_pos_change)
+
+            manual_var.trace_add("write", lambda *a, w=manual_entries, v=manual_var: _toggle_manual_entries(w, v))
+            _toggle_manual_entries(manual_entries, manual_var)
+
+        button_frame = ttk.Frame(settings_window, padding=(10, 0, 10, 10))
+        button_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+
+        def save_settings():
+            try:
+                for i, data in enumerate(self.vsm_data):
+                    vars_dict = file_settings_vars[i]
+                    settings = {
+                        "manual": vars_dict["manual"].get(),
+                        "link_ranges": vars_dict["link"].get(),
+                        "pos_range": (
+                            vars_dict["pos_min"].get(),
+                            vars_dict["pos_max"].get(),
+                        ),
+                        "neg_range": (
+                            vars_dict["neg_min"].get(),
+                            vars_dict["neg_max"].get(),
+                        ),
+                    }
+                    data["ms_calc_settings"] = settings
+                settings_window.destroy()
+                self.update_graph()
+                messagebox.showinfo("成功", "飽和磁化の計算設定を保存しました。", parent=settings_window)
+            except ValueError:
+                messagebox.showerror("入力エラー", "磁場範囲には有効な数値を入力してください。", parent=settings_window)
+
+        ttk.Button(button_frame, text="キャンセル", command=settings_window.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        ttk.Button(button_frame, text="OK & 保存", command=save_settings).grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
     def _create_style_controls(self, parent):
         parent.grid_columnconfigure(1, weight=1)
@@ -312,7 +444,7 @@ class VSMApp:
             row=2, column=1, sticky="ew", padx=5, pady=(0, 5)
         )
         self.individual_color_frame = ttk.LabelFrame(
-            parent, text=" 各ファイルの色 ", padding="10"
+            parent, text=" ファイルリストと描画順 ", padding="10"
         )
         self.individual_color_frame.pack(fill=tk.X, pady=(10, 0))
         self.individual_color_frame.grid_columnconfigure(1, weight=1)
@@ -397,30 +529,78 @@ class VSMApp:
         for var in trace_vars:
             var.trace_add("write", self._schedule_update)
 
-    def _reset_individual_color_widgets(self):
-        if hasattr(self, "individual_color_frame"):
-            for widget in self.individual_color_frame.winfo_children():
-                widget.destroy()
+    def _update_file_list_ui(self):
+        # Clear existing widgets
+        for widget in self.individual_color_frame.winfo_children():
+            widget.destroy()
 
-    def _create_individual_color_widget(self, index, filename, color_var):
-        row_frame = ttk.Frame(self.individual_color_frame)
-        row_frame.pack(fill=tk.X, pady=2)
-        display_name = (filename[:25] + "..") if len(filename) > 27 else filename
-        ttk.Label(row_frame, text=f"{display_name}:").pack(
-            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5)
-        )
-        preview = tk.Label(row_frame, text="", bg=color_var.get(), width=4)
-        preview.pack(side=tk.RIGHT, padx=5)
-        color_var.trace_add(
-            "write",
-            lambda *args: (preview.config(bg=color_var.get()), self._schedule_update()),
-        )
-        ttk.Button(
-            row_frame,
-            text="選択",
-            width=5,
-            command=lambda idx=index: self.choose_individual_color(idx),
-        ).pack(side=tk.RIGHT)
+        # Re-create widgets for each file
+        for i, data in enumerate(self.vsm_data):
+            row_frame = ttk.Frame(self.individual_color_frame)
+            row_frame.pack(fill=tk.X, pady=2)
+            
+            filename = data["path"].name
+            color_var = self.file_color_vars[i]
+
+            # Up/Down buttons
+            up_button = ttk.Button(
+                row_frame, text="↑", width=3, command=lambda idx=i: self._move_file_up(idx)
+            )
+            up_button.pack(side=tk.LEFT, padx=(0, 2))
+            if i == 0:
+                up_button.config(state=tk.DISABLED)
+
+            down_button = ttk.Button(
+                row_frame, text="↓", width=3, command=lambda idx=i: self._move_file_down(idx)
+            )
+            down_button.pack(side=tk.LEFT, padx=(0, 5))
+            if i == len(self.vsm_data) - 1:
+                down_button.config(state=tk.DISABLED)
+            
+            # File label
+            display_name = (filename[:25] + "..") if len(filename) > 27 else filename
+            ttk.Label(row_frame, text=display_name).pack(
+                side=tk.LEFT, fill=tk.X, expand=True
+            )
+            
+            # Color preview and button
+            preview = tk.Label(row_frame, text="", bg=color_var.get(), width=4)
+            preview.pack(side=tk.RIGHT, padx=5)
+            color_var.trace_add(
+                "write",
+                lambda *args, p=preview, cv=color_var: (
+                    p.config(bg=cv.get()),
+                    self._schedule_update(),
+                ),
+            )
+            ttk.Button(
+                row_frame,
+                text="色選択",
+                width=6,
+                command=lambda idx=i: self.choose_individual_color(idx),
+            ).pack(side=tk.RIGHT)
+
+    def _move_file_up(self, index):
+        if index > 0:
+            # Swap data
+            self.vsm_data.insert(index - 1, self.vsm_data.pop(index))
+            self.file_color_vars.insert(index - 1, self.file_color_vars.pop(index))
+
+            # Rebuild all dynamic UIs and update graph
+            self._update_file_list_ui()
+            self._update_demag_settings_ui()
+            self.update_graph()
+
+    def _move_file_down(self, index):
+        if index < len(self.vsm_data) - 1:
+            # Swap data
+            self.vsm_data.insert(index + 1, self.vsm_data.pop(index))
+            self.file_color_vars.insert(index + 1, self.file_color_vars.pop(index))
+
+            # Rebuild all dynamic UIs and update graph
+            self._update_file_list_ui()
+            self._update_demag_settings_ui()
+            self.update_graph()
 
     def choose_individual_color(self, index):
         if index >= len(self.file_color_vars):
@@ -446,7 +626,7 @@ class VSMApp:
 
     def show_metadata_window(self):
         if not self.all_metadata:
-            messagebox.showinfo("情報", "表示できる測定情報がありません。")
+            messagebox.showinfo("情報", "表示できる測定情報がありません。", parent=self.root)
             return
         info_window = tk.Toplevel(self.root)
         info_window.title("測定情報")
@@ -497,11 +677,11 @@ class VSMApp:
         files = filedialog.askopenfilenames(
             title="解析したいVSMファイルを選択",
             filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
+            parent=self.root
         )
         if not files:
             return
         self.vsm_data, self.file_color_vars = [], []
-        self._reset_individual_color_widgets()
         for i, file_path in enumerate(files):
             path = Path(file_path)
             header_row = vsm_logic.find_header_row(path)
@@ -513,7 +693,7 @@ class VSMApp:
                 df.dropna(inplace=True)
                 if not {"H(Oe)", "M(emu)"}.issubset(df.columns):
                     messagebox.showwarning(
-                        "形式エラー", f"ファイル '{path.name}' に必要な列がありません。"
+                        "形式エラー", f"ファイル '{path.name}' に必要な列がありません。", parent=self.root
                     )
                     continue
                 self.vsm_data.append({"path": path, "df": df})
@@ -521,10 +701,11 @@ class VSMApp:
                     value=self.base_colors[i % len(self.base_colors)]
                 )
                 self.file_color_vars.append(color_var)
-                self._create_individual_color_widget(i, path.name, color_var)
             except Exception as e:
-                messagebox.showerror("読込エラー", f"'{path.name}'の読込失敗:\n{e}")
-                self.info_button.config(state=tk.NORMAL if self.vsm_data else tk.DISABLED)
+                messagebox.showerror("読込エラー", f"'{path.name}'の読込失敗:\n{e}", parent=self.root)
+
+        self.info_button.config(state=tk.NORMAL if self.vsm_data else tk.DISABLED)
+        self._update_file_list_ui()
         self._update_demag_settings_ui()
         self.update_graph()
 
@@ -590,7 +771,7 @@ class VSMApp:
             manual_check.grid(row=0, column=1, sticky="w")
             
             link_check = ttk.Checkbutton(frame, text="正負の範囲を連動", variable=link_var)
-            link_check.grid(row=0, column=3, columnspan=2, sticky="w")
+            link_check.grid(row=0, column=2, columnspan=2, sticky="w")
 
             pos_min_entry = ttk.Entry(frame, textvariable=pos_min_var, width=7)
             pos_min_entry.grid(row=1, column=1, sticky="ew", padx=(0,2))
@@ -627,7 +808,9 @@ class VSMApp:
             _toggle_manual_entries(manual_entries, manual_var)
 
         # Update button state
-        self.apply_to_all_button.config(state=tk.NORMAL if len(self.vsm_data) > 1 else tk.DISABLED)
+        num_files = len(self.vsm_data)
+        self.apply_to_all_button.config(state=tk.NORMAL if num_files > 1 else tk.DISABLED)
+        self.ms_settings_button.config(state=tk.NORMAL if num_files > 0 else tk.DISABLED)
 
     def _apply_first_file_settings_to_all(self):
         if len(self.vsm_data) < 2:
@@ -657,7 +840,7 @@ class VSMApp:
                 vars_dict["neg_min"].set(first_file_settings["neg_range"][0])
                 vars_dict["neg_max"].set(first_file_settings["neg_range"][1])
         
-        messagebox.showinfo("成功", "一番上のファイルの設定をすべてのファイルに適用しました。")
+        messagebox.showinfo("成功", "一番上のファイルの設定をすべてのファイルに適用しました。", parent=self.root)
         # The last .set() call will have triggered a graph update via its trace.
 
     def _on_demag_setting_change(self, file_index, var_changed):
@@ -719,10 +902,10 @@ class VSMApp:
                 int(self.save_dpi_var.get()),
             )
             if w <= 0 or h <= 0 or dpi <= 0:
-                raise ValueError("値は正数である必要があります。")
+                raise ValueError("値は正数である必要があります。",)
         except ValueError as e:
             messagebox.showerror(
-                "入力エラー", f"幅,高さ,DPIには有効な正数を入力してください。\n({e})"
+                "入力エラー", f"幅,高さ,DPIには有効な正数を入力してください。\n({e})", parent=self.root
             )
             return
         file_path = filedialog.asksaveasfilename(
@@ -734,6 +917,7 @@ class VSMApp:
                 ("JPEG", "*.jpg"),
             ],
             defaultextension=".png",
+            parent=self.root
         )
         if not file_path:
             return
@@ -745,10 +929,10 @@ class VSMApp:
             self.fig.set_size_inches(w, h)
             self.fig.savefig(file_path, dpi=dpi, bbox_inches="tight")
             self.log_message("保存が完了しました。\n")
-            messagebox.showinfo("成功", f"画像を保存しました:\n{file_path}")
+            messagebox.showinfo("成功", f"画像を保存しました:\n{file_path}", parent=self.root)
         except Exception as e:
             self.log_message(f"エラー: 画像保存失敗 - {e}\n")
-            messagebox.showerror("保存エラー", f"画像保存中にエラーが発生:\n{e}")
+            messagebox.showerror("保存エラー", f"画像保存中にエラーが発生:\n{e}", parent=self.root)
         finally:
             self.fig.set_size_inches(original_size)
             self.canvas.draw_idle()
@@ -888,7 +1072,43 @@ class VSMApp:
                     M_final.iloc[min_H_idx_loop:].values,
                 )
 
-                Ms_avg = vsm_logic.calculate_saturation_magnetization(H_raw, M_final)
+                # --- 飽和磁化 (Ms) 計算 ---
+                ms_settings = data.get("ms_calc_settings")
+                ms_pos_range, ms_neg_range = None, None
+
+                try:
+                    if ms_settings and ms_settings.get("manual"):
+                        # Use manual ranges if they are set
+                        print("    Ms計算: 手動範囲を使用")
+                        ms_pos_range = (
+                            float(ms_settings["pos_range"][0]),
+                            float(ms_settings["pos_range"][1]),
+                        )
+                        ms_neg_range = (
+                            float(ms_settings["neg_range"][0]),
+                            float(ms_settings["neg_range"][1]),
+                        )
+                    elif params.get("xlim_max") is not None and params.get("xlim_min") is not None:
+                        # Otherwise, use plot limits if they are set
+                        print("    Ms計算: 描画範囲を使用")
+                        h_max_limit = params["xlim_max"]
+                        h_min_limit = params["xlim_min"]
+                        # Use the outer 10% of the *visible* range if the range is positive
+                        if h_max_limit > 0 and h_min_limit < h_max_limit:
+                            pos_start = h_max_limit - (h_max_limit - h_min_limit) * 0.1
+                            neg_end = h_min_limit + (h_max_limit - h_min_limit) * 0.1
+                            ms_pos_range = (pos_start, h_max_limit)
+                            ms_neg_range = (h_min_limit, neg_end)
+
+                except (ValueError, IndexError, TypeError):
+                    print("  エラー: Ms計算の範囲が無効です。自動計算にフォールバックします。",)
+                    ms_pos_range, ms_neg_range = None, None
+
+
+                Ms_avg = vsm_logic.calculate_saturation_magnetization(
+                    H_raw, M_final, pos_range=ms_pos_range, neg_range=ms_neg_range
+                )
+
                 Mr_avg = vsm_logic.calculate_remanence(H_down, M_down, H_up, M_up)
                 vsm_logic.calculate_coercivity(H_down, M_down, H_up, M_up)
 
@@ -954,5 +1174,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = VSMApp(root)
     root.mainloop()
-
-
