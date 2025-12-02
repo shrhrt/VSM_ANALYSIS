@@ -44,12 +44,6 @@ class VSMApp:
         self.area_var = tk.StringVar(value="1.0")
         self.offset_correction_var = tk.BooleanVar(value=True)
         self.show_legend_var = tk.BooleanVar(value=True)
-        self.demag_correction_var = tk.BooleanVar(value=True)
-        self.manual_slope_var = tk.BooleanVar(value=False)
-        self.pos_h_min_var = tk.StringVar(value="1.5")
-        self.pos_h_max_var = tk.StringVar(value="2.0")
-        self.neg_h_min_var = tk.StringVar(value="-2.0")
-        self.neg_h_max_var = tk.StringVar(value="-1.5")
         self.unit_mode_var = tk.StringVar(value="SI (T, kA/m)")
         self.marker_size_var = tk.StringVar(value="5")
         self.line_width_var = tk.StringVar(value="1.5")
@@ -141,7 +135,6 @@ class VSMApp:
         self.canvas.get_tk_widget().grid(row=1, column=0, sticky="nsew")
 
         self._add_traces()
-        self.toggle_demag_fields()
         self.update_graph()
 
     def _configure_styles(self):
@@ -236,50 +229,41 @@ class VSMApp:
         )
         self.legend_check.grid(row=4, column=0, columnspan=2, sticky="w", pady=(5, 0))
 
-        demag_frame = ttk.LabelFrame(parent, text=" 反磁性補正 ", padding="10")
-        demag_frame.pack(fill=tk.X, pady=(0, 10))
-        demag_frame.grid_columnconfigure(1, weight=1)
-        demag_frame.grid_columnconfigure(3, weight=1)
-        self.demag_check = ttk.Checkbutton(
-            demag_frame, text="反磁性補正を有効化", variable=self.demag_correction_var
-        )
-        self.demag_check.grid(row=0, column=0, columnspan=4, sticky="w")
-        self.manual_check = ttk.Checkbutton(
-            demag_frame, text="傾き計算の範囲を手動指定", variable=self.manual_slope_var
-        )
-        self.manual_check.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 5))
-        ttk.Label(demag_frame, text="正 H (T):").grid(row=2, column=0, sticky="w")
-        self.pos_h_min_entry = ttk.Entry(
-            demag_frame, textvariable=self.pos_h_min_var, width=7
-        )
-        self.pos_h_min_entry.grid(row=2, column=1, sticky="ew")
-        ttk.Label(demag_frame, text="～").grid(row=2, column=2)
-        self.pos_h_max_entry = ttk.Entry(
-            demag_frame, textvariable=self.pos_h_max_var, width=7
-        )
-        self.pos_h_max_entry.grid(row=2, column=3, sticky="ew")
-        ttk.Label(demag_frame, text="負 H (T):").grid(
-            row=3, column=0, sticky="w", pady=(5, 0)
-        )
-        self.neg_h_min_entry = ttk.Entry(
-            demag_frame, textvariable=self.neg_h_min_var, width=7
-        )
-        self.neg_h_min_entry.grid(row=3, column=1, sticky="ew", pady=(5, 0))
-        ttk.Label(demag_frame, text="～").grid(row=3, column=2, pady=(5, 0))
-        self.neg_h_max_entry = ttk.Entry(
-            demag_frame, textvariable=self.neg_h_max_var, width=7
-        )
-        self.neg_h_max_entry.grid(row=3, column=3, sticky="ew", pady=(5, 0))
+        demag_outer_frame = ttk.LabelFrame(parent, text=" 反磁性補正 ", padding="10")
+        demag_outer_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        self.per_file_demag_button = ttk.Button(
-            demag_frame,
-            text="ファイル別 反磁性補正設定",
-            command=self.show_per_file_demag_settings_window,
+        # Create a canvas and a scrollbar
+        demag_canvas = tk.Canvas(
+            demag_outer_frame,
+            borderwidth=0,
+            background=self.style.lookup(".", "background"),
+            highlightthickness=0,
+            height=200,
+        )
+        demag_scrollbar = ttk.Scrollbar(
+            demag_outer_frame, orient="vertical", command=demag_canvas.yview
+        )
+        self.demag_scrollable_frame = ttk.Frame(demag_canvas)
+
+        self.demag_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: demag_canvas.configure(scrollregion=demag_canvas.bbox("all")),
+        )
+
+        demag_canvas.create_window((0, 0), window=self.demag_scrollable_frame, anchor="nw")
+        demag_canvas.configure(yscrollcommand=demag_scrollbar.set)
+
+        demag_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        demag_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.apply_to_all_button = ttk.Button(
+            demag_outer_frame,
+            text="一番上の設定を全ファイルに適用",
+            command=self._apply_first_file_settings_to_all,
             state=tk.DISABLED,
         )
-        self.per_file_demag_button.grid(
-            row=4, column=0, columnspan=4, sticky="ew", pady=(10, 0)
-        )
+        self.apply_to_all_button.pack(fill=tk.X, pady=(5, 0), padx=5)
+
 
     def _create_style_controls(self, parent):
         parent.grid_columnconfigure(1, weight=1)
@@ -408,20 +392,10 @@ class VSMApp:
             self.ylim_max_var,
             self.show_grid_var,
             self.show_zero_lines_var,
-            self.demag_correction_var,
-            self.manual_slope_var,
-            self.pos_h_min_var,
-            self.pos_h_max_var,
-            self.neg_h_min_var,
-            self.neg_h_max_var,
             self.unit_mode_var,
         ]
         for var in trace_vars:
             var.trace_add("write", self._schedule_update)
-        self.demag_correction_var.trace_add(
-            "write", lambda *a: self.toggle_demag_fields()
-        )
-        self.manual_slope_var.trace_add("write", lambda *a: self.toggle_demag_fields())
 
     def _reset_individual_color_widgets(self):
         if hasattr(self, "individual_color_frame"):
@@ -448,171 +422,6 @@ class VSMApp:
             command=lambda idx=index: self.choose_individual_color(idx),
         ).pack(side=tk.RIGHT)
 
-    def show_per_file_demag_settings_window(self):
-        settings_window = tk.Toplevel(self.root)
-        settings_window.title("ファイル別 反磁性補正設定")
-        settings_window.geometry("650x500")
-        settings_window.transient(self.root)
-        settings_window.grab_set()
-
-        # --- Main Frame ---
-        main_frame = ttk.Frame(settings_window, padding=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # --- Canvas and Scrollbar for the list of files ---
-        canvas = tk.Canvas(
-            main_frame,
-            borderwidth=0,
-            background=self.style.lookup(".", "background"),
-            highlightthickness=0,
-        )
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas, padding=(0, 0, 10, 0))
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
-        )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # --- Store widgets and variables ---
-        file_settings_vars = []
-
-        def _toggle_manual_entries(widgets, manual_var):
-            state = tk.NORMAL if manual_var.get() else tk.DISABLED
-            for widget in widgets:
-                widget.config(state=state)
-
-        # --- Populate with file settings ---
-        for i, data in enumerate(self.vsm_data):
-            file_path = data["path"]
-            # Get existing settings or use global defaults
-            current_settings = data.get(
-                "demag_settings",
-                {
-                    "enabled": self.demag_correction_var.get(),
-                    "manual": self.manual_slope_var.get(),
-                    "pos_range": (
-                        self.pos_h_min_var.get(),
-                        self.pos_h_max_var.get(),
-                    ),
-                    "neg_range": (
-                        self.neg_h_min_var.get(),
-                        self.neg_h_max_var.get(),
-                    ),
-                },
-            )
-
-            # Create variables for this file
-            enabled_var = tk.BooleanVar(value=current_settings.get("enabled", False))
-            manual_var = tk.BooleanVar(value=current_settings.get("manual", False))
-            pos_min_var = tk.StringVar(value=current_settings.get("pos_range", ["", ""])[0])
-            pos_max_var = tk.StringVar(value=current_settings.get("pos_range", ["", ""])[1])
-            neg_min_var = tk.StringVar(value=current_settings.get("neg_range", ["", ""])[0])
-            neg_max_var = tk.StringVar(value=current_settings.get("neg_range", ["", ""])[1])
-
-            # Store them
-            file_settings_vars.append(
-                {
-                    "enabled": enabled_var,
-                    "manual": manual_var,
-                    "pos_min": pos_min_var,
-                    "pos_max": pos_max_var,
-                    "neg_min": neg_min_var,
-                    "neg_max": neg_max_var,
-                }
-            )
-
-            # Create widgets for this file
-            frame = ttk.LabelFrame(
-                scrollable_frame, text=file_path.name, padding=10
-            )
-            frame.pack(fill=tk.X, expand=True, pady=5)
-            frame.grid_columnconfigure(1, weight=1)
-            frame.grid_columnconfigure(3, weight=1)
-
-            enabled_check = ttk.Checkbutton(
-                frame, text="反磁性補正を有効化", variable=enabled_var
-            )
-            enabled_check.grid(row=0, column=0, columnspan=4, sticky="w")
-
-            manual_check = ttk.Checkbutton(
-                frame, text="傾き計算の範囲を手動指定", variable=manual_var
-            )
-            manual_check.grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 5))
-
-            # Entry widgets
-            ttk.Label(frame, text="正 H (T):").grid(row=2, column=0, sticky="w")
-            pos_min_entry = ttk.Entry(frame, textvariable=pos_min_var, width=7)
-            pos_min_entry.grid(row=2, column=1, sticky="ew")
-            ttk.Label(frame, text="～").grid(row=2, column=2)
-            pos_max_entry = ttk.Entry(frame, textvariable=pos_max_var, width=7)
-            pos_max_entry.grid(row=2, column=3, sticky="ew")
-
-            ttk.Label(frame, text="負 H (T):").grid(
-                row=3, column=0, sticky="w", pady=(5, 0)
-            )
-            neg_min_entry = ttk.Entry(frame, textvariable=neg_min_var, width=7)
-            neg_min_entry.grid(row=3, column=1, sticky="ew", pady=(5, 0))
-            ttk.Label(frame, text="～").grid(row=3, column=2, pady=(5, 0))
-            neg_max_entry = ttk.Entry(frame, textvariable=neg_max_var, width=7)
-            neg_max_entry.grid(row=3, column=3, sticky="ew", pady=(5, 0))
-            
-            manual_entries = [
-                pos_min_entry, pos_max_entry, neg_min_entry, neg_max_entry
-            ]
-
-            # Set initial state and add trace
-            _toggle_manual_entries(manual_entries, manual_var)
-            manual_var.trace_add(
-                "write",
-                lambda *args, w=manual_entries, v=manual_var: _toggle_manual_entries(w, v),
-            )
-
-        # --- Buttons Frame ---
-        button_frame = ttk.Frame(settings_window, padding=(10, 0, 10, 10))
-        button_frame.pack(fill=tk.X, side=tk.BOTTOM)
-        button_frame.grid_columnconfigure(0, weight=1)
-        button_frame.grid_columnconfigure(1, weight=1)
-
-        def save_settings():
-            try:
-                for i, data in enumerate(self.vsm_data):
-                    vars_dict = file_settings_vars[i]
-                    settings = {
-                        "enabled": vars_dict["enabled"].get(),
-                        "manual": vars_dict["manual"].get(),
-                        "pos_range": (
-                            float(vars_dict["pos_min"].get()),
-                            float(vars_dict["pos_max"].get()),
-                        ),
-                        "neg_range": (
-                            float(vars_dict["neg_min"].get()),
-                            float(vars_dict["neg_max"].get()),
-                        ),
-                    }
-                    data["demag_settings"] = settings
-                settings_window.destroy()
-                self.update_graph()
-                messagebox.showinfo("成功", "ファイル別の設定を保存しました。")
-            except ValueError:
-                messagebox.showerror(
-                    "入力エラー",
-                    "磁場範囲には有効な数値を入力してください。",
-                    parent=settings_window,
-                )
-
-        ttk.Button(button_frame, text="キャンセル", command=settings_window.destroy).grid(
-            row=0, column=0, sticky="ew", padx=(0, 5)
-        )
-        ttk.Button(button_frame, text="OK & 保存", command=save_settings).grid(
-            row=0, column=1, sticky="ew", padx=(5, 0)
-        )
-
     def choose_individual_color(self, index):
         if index >= len(self.file_color_vars):
             return
@@ -629,19 +438,6 @@ class VSMApp:
         if self._update_job:
             self.root.after_cancel(self._update_job)
         self._update_job = self.root.after(250, self.update_graph)
-
-    def toggle_demag_fields(self):
-        correction_on = self.demag_correction_var.get()
-        self.manual_check.config(state=tk.NORMAL if correction_on else tk.DISABLED)
-        manual_on = self.manual_slope_var.get()
-        manual_entry_state = tk.NORMAL if correction_on and manual_on else tk.DISABLED
-        for widget in [
-            self.pos_h_min_entry,
-            self.pos_h_max_entry,
-            self.neg_h_min_entry,
-            self.neg_h_max_entry,
-        ]:
-            widget.config(state=manual_entry_state)
 
     def log_message(self, message):
         self.log_text.insert(tk.END, message)
@@ -729,10 +525,191 @@ class VSMApp:
             except Exception as e:
                 messagebox.showerror("読込エラー", f"'{path.name}'の読込失敗:\n{e}")
                 self.info_button.config(state=tk.NORMAL if self.vsm_data else tk.DISABLED)
-        self.per_file_demag_button.config(
-            state=tk.NORMAL if self.vsm_data else tk.DISABLED
-        )
+        self._update_demag_settings_ui()
         self.update_graph()
+
+    def _update_demag_settings_ui(self):
+        # Clear existing widgets
+        for widget in self.demag_scrollable_frame.winfo_children():
+            widget.destroy()
+
+        if not self.vsm_data:
+            ttk.Label(self.demag_scrollable_frame, text="ファイルが読み込まれていません。").pack()
+            return
+
+        def _toggle_manual_entries(widgets, manual_var):
+            state = tk.NORMAL if manual_var.get() else tk.DISABLED
+            for widget in widgets:
+                widget.config(state=state)
+
+        for i, data in enumerate(self.vsm_data):
+            # Ensure settings exist
+            if "demag_settings" not in data:
+                data["demag_settings"] = {
+                    "enabled": True,
+                    "manual": False,
+                    "pos_range": ("1.5", "2.0"),
+                    "neg_range": ("-2.0", "-1.5"),
+                    "link_ranges": True,
+                }
+            
+            # Store vars in the data dict to keep them alive
+            if "demag_vars" not in data:
+                 data["demag_vars"] = {}
+
+            current_settings = data["demag_settings"]
+            
+            enabled_var = tk.BooleanVar(value=current_settings.get("enabled", True))
+            manual_var = tk.BooleanVar(value=current_settings.get("manual", False))
+            pos_min_var = tk.StringVar(value=current_settings.get("pos_range", ["1.5", "2.0"])[0])
+            pos_max_var = tk.StringVar(value=current_settings.get("pos_range", ["1.5", "2.0"])[1])
+            neg_min_var = tk.StringVar(value=current_settings.get("neg_range", ["-2.0", "-1.5"])[0])
+            neg_max_var = tk.StringVar(value=current_settings.get("neg_range", ["-2.0", "-1.5"])[1])
+            link_var = tk.BooleanVar(value=current_settings.get("link_ranges", True))
+            
+            data["demag_vars"] = {
+                "enabled": enabled_var,
+                "manual": manual_var,
+                "pos_min": pos_min_var,
+                "pos_max": pos_max_var,
+                "neg_min": neg_min_var,
+                "neg_max": neg_max_var,
+                "link": link_var,
+            }
+            
+            # --- Create Widgets ---
+            frame = ttk.LabelFrame(self.demag_scrollable_frame, text=data["path"].name, padding=10)
+            frame.pack(fill=tk.X, expand=True, pady=5, padx=5)
+            frame.grid_columnconfigure(1, weight=1)
+            frame.grid_columnconfigure(3, weight=1)
+
+            enabled_check = ttk.Checkbutton(frame, text="反磁性補正", variable=enabled_var)
+            enabled_check.grid(row=0, column=0, sticky="w")
+
+            manual_check = ttk.Checkbutton(frame, text="手動範囲", variable=manual_var)
+            manual_check.grid(row=0, column=1, sticky="w")
+            
+            link_check = ttk.Checkbutton(frame, text="正負の範囲を連動", variable=link_var)
+            link_check.grid(row=0, column=3, columnspan=2, sticky="w")
+
+            pos_min_entry = ttk.Entry(frame, textvariable=pos_min_var, width=7)
+            pos_min_entry.grid(row=1, column=1, sticky="ew", padx=(0,2))
+            ttk.Label(frame, text="～").grid(row=1, column=2)
+            pos_max_entry = ttk.Entry(frame, textvariable=pos_max_var, width=7)
+            pos_max_entry.grid(row=1, column=3, sticky="ew", padx=(2,0))
+            ttk.Label(frame, text=" (正 H)").grid(row=1, column=4, sticky="w")
+            
+            neg_min_entry = ttk.Entry(frame, textvariable=neg_min_var, width=7)
+            neg_min_entry.grid(row=2, column=1, sticky="ew", pady=(5, 0), padx=(0,2))
+            ttk.Label(frame, text="～").grid(row=2, column=2, pady=(5, 0))
+            neg_max_entry = ttk.Entry(frame, textvariable=neg_max_var, width=7)
+            neg_max_entry.grid(row=2, column=3, sticky="ew", pady=(5, 0), padx=(2,0))
+            ttk.Label(frame, text=" (負 H)").grid(row=2, column=4, sticky="w", pady=(5, 0))
+            
+            manual_entries = [pos_min_entry, pos_max_entry, neg_min_entry, neg_max_entry]
+            
+            # --- Traces for real-time update ---
+            # Pass the internal var name to the callback to identify the trigger
+            enabled_var.trace_add("write", lambda *a, idx=i, v=enabled_var: self._on_demag_setting_change(idx, v))
+            manual_var.trace_add("write", lambda *a, idx=i, v=manual_var: self._on_demag_setting_change(idx, v))
+            link_var.trace_add("write", lambda *a, idx=i, v=link_var: self._on_demag_setting_change(idx, v))
+            pos_min_var.trace_add("write", lambda *a, idx=i, v=pos_min_var: self._on_demag_setting_change(idx, v))
+            pos_max_var.trace_add("write", lambda *a, idx=i, v=pos_max_var: self._on_demag_setting_change(idx, v))
+            neg_min_var.trace_add("write", lambda *a, idx=i, v=neg_min_var: self._on_demag_setting_change(idx, v))
+            neg_max_var.trace_add("write", lambda *a, idx=i, v=neg_max_var: self._on_demag_setting_change(idx, v))
+
+
+            # Add trace to toggle entries and also trigger update
+            manual_var.trace_add(
+                "write",
+                lambda *args, w=manual_entries, v=manual_var: _toggle_manual_entries(w, v),
+            )
+            _toggle_manual_entries(manual_entries, manual_var)
+
+        # Update button state
+        self.apply_to_all_button.config(state=tk.NORMAL if len(self.vsm_data) > 1 else tk.DISABLED)
+
+    def _apply_first_file_settings_to_all(self):
+        if len(self.vsm_data) < 2:
+            return
+
+        # 1. Get settings from the first file's data model
+        first_file_settings = self.vsm_data[0]["demag_settings"].copy()
+
+        # 2. Apply settings to all other files
+        for i in range(1, len(self.vsm_data)):
+            data = self.vsm_data[i]
+            
+            # Update the data model
+            data["demag_settings"] = first_file_settings.copy()
+            
+            # Update the UI variables, which will trigger traces
+            vars_dict = data.get("demag_vars")
+            if vars_dict:
+                # Temporarily disable negative traces to prevent feedback loops
+                # while we set them manually. This is a bit tricky with current setup.
+                # A safer way is to just set the values. The graph will update once at the end.
+                vars_dict["enabled"].set(first_file_settings["enabled"])
+                vars_dict["manual"].set(first_file_settings["manual"])
+                vars_dict["link"].set(first_file_settings["link_ranges"])
+                vars_dict["pos_min"].set(first_file_settings["pos_range"][0])
+                vars_dict["pos_max"].set(first_file_settings["pos_range"][1])
+                vars_dict["neg_min"].set(first_file_settings["neg_range"][0])
+                vars_dict["neg_max"].set(first_file_settings["neg_range"][1])
+        
+        messagebox.showinfo("成功", "一番上のファイルの設定をすべてのファイルに適用しました。")
+        # The last .set() call will have triggered a graph update via its trace.
+
+    def _on_demag_setting_change(self, file_index, var_changed):
+        if file_index >= len(self.vsm_data):
+            return
+
+        data = self.vsm_data[file_index]
+        vars_dict = data.get("demag_vars", {})
+        
+        if not vars_dict:
+            return
+
+        # --- Linking Logic ---
+        if vars_dict["link"].get():
+            try:
+                if var_changed == vars_dict["pos_min"]:
+                    new_val = float(vars_dict["pos_min"].get())
+                    vars_dict["neg_max"].set(str(-new_val))
+                elif var_changed == vars_dict["pos_max"]:
+                    new_val = float(vars_dict["pos_max"].get())
+                    vars_dict["neg_min"].set(str(-new_val))
+            except (ValueError, TclError):
+                pass # Ignore errors during typing
+
+        # --- Save and Update ---
+        try:
+            # Get all current values
+            pos_min_str = vars_dict["pos_min"].get()
+            pos_max_str = vars_dict["pos_max"].get()
+            neg_min_str = vars_dict["neg_min"].get()
+            neg_max_str = vars_dict["neg_max"].get()
+            
+            # Validate that all values are convertible to float before saving
+            float(pos_min_str)
+            float(pos_max_str)
+            float(neg_min_str)
+            float(neg_max_str)
+            
+            settings = {
+                "enabled": vars_dict["enabled"].get(),
+                "manual": vars_dict["manual"].get(),
+                "link_ranges": vars_dict["link"].get(),
+                "pos_range": (pos_min_str, pos_max_str),
+                "neg_range": (neg_min_str, neg_max_str),
+            }
+            data["demag_settings"] = settings
+            self._schedule_update()
+        except (ValueError, TclError):
+            # This can happen if an entry is temporarily invalid during typing.
+            # We just won't trigger an update in that case.
+            pass
+
 
     def save_figure(self):
         try:
@@ -815,7 +792,7 @@ class VSMApp:
                 transform=self.ax.transAxes,
             )
             self.canvas.draw()
-            self.per_file_demag_button.config(state=tk.DISABLED)
+            self._update_demag_settings_ui()
             return
 
         output_stream = io.StringIO()
@@ -850,61 +827,35 @@ class VSMApp:
                 slope, r2_pos, r2_neg = 0, 0, 0
                 file_specific_settings = data.get("demag_settings")
 
-                if file_specific_settings:
-                    # ファイル別設定を使用
-                    print("  ファイル別反磁性補正設定を使用。")
-                    if file_specific_settings["enabled"]:
-                        print("  反磁性補正: 有効")
-                        if file_specific_settings["manual"]:
-                            print("    傾き計算: 手動設定モード")
-                            pos_range = file_specific_settings["pos_range"]
-                            neg_range = file_specific_settings["neg_range"]
+                if file_specific_settings and file_specific_settings["enabled"]:
+                    print("  反磁性補正: 有効")
+                    if file_specific_settings["manual"]:
+                        print("    傾き計算: 手動設定モード")
+                        try:
+                            pos_range = (
+                                float(file_specific_settings["pos_range"][0]),
+                                float(file_specific_settings["pos_range"][1]),
+                            )
+                            neg_range = (
+                                float(file_specific_settings["neg_range"][0]),
+                                float(file_specific_settings["neg_range"][1]),
+                            )
                             slope, r2_pos, r2_neg = vsm_logic.find_demag_slope_manual(
                                 H_raw, M_raw, pos_range, neg_range
                             )
-                        else:
-                            print("    傾き計算: 自動検出モード")
-                            slope, r2_pos, r2_neg = vsm_logic.find_demag_slope_auto(
-                                H_raw, M_raw
-                            )
-                        print(
-                            f"    補正傾き S: {slope:.6f}, R^2: [正 {r2_pos:.4f}], [負 {r2_neg:.4f}]"
-                        )
+                        except (ValueError, IndexError):
+                            print("  エラー: 手動設定の磁場範囲が無効。")
+                            slope, r2_pos, r2_neg = 0, 0, 0
                     else:
-                        print("  反磁性補正: 無効")
-
+                        print("    傾き計算: 自動検出モード")
+                        slope, r2_pos, r2_neg = vsm_logic.find_demag_slope_auto(
+                            H_raw, M_raw
+                        )
+                    print(
+                        f"    補正傾き S: {slope:.6f}, R^2: [正 {r2_pos:.4f}], [負 {r2_neg:.4f}]"
+                    )
                 else:
-                    # グローバル設定を使用 (従来の動作)
-                    if self.demag_correction_var.get():
-                        print("  グローバル反磁性補正設定を使用。")
-                        print("  反磁性補正: 有効")
-                        if self.manual_slope_var.get():
-                            print("    傾き計算: 手動設定モード")
-                            try:
-                                pos_range = (
-                                    float(self.pos_h_min_var.get()),
-                                    float(self.pos_h_max_var.get()),
-                                )
-                                neg_range = (
-                                    float(self.neg_h_min_var.get()),
-                                    float(self.neg_h_max_var.get()),
-                                )
-                                slope, r2_pos, r2_neg = vsm_logic.find_demag_slope_manual(
-                                    H_raw, M_raw, pos_range, neg_range
-                                )
-                            except ValueError:
-                                print("  エラー: 手動設定の磁場範囲が無効。")
-                                slope, r2_pos, r2_neg = 0, 0, 0
-                        else:
-                            print("    傾き計算: 自動検出モード")
-                            slope, r2_pos, r2_neg = vsm_logic.find_demag_slope_auto(
-                                H_raw, M_raw
-                            )
-                        print(
-                            f"    補正傾き S: {slope:.6f}, R^2: [正 {r2_pos:.4f}], [負 {r2_neg:.4f}]"
-                        )
-                    else:
-                        print("  反磁性補正: 無効")
+                    print("  反磁性補正: 無効")
 
                 M_corrected = M_raw - H_raw * slope
                 if self.offset_correction_var.get():
@@ -1003,4 +954,5 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = VSMApp(root)
     root.mainloop()
+
 
