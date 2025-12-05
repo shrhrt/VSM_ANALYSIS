@@ -238,6 +238,7 @@ def calculate_saturation_magnetization(H, M, pos_range=None, neg_range=None):
 
 def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
     """グラフの軸や目盛りなどを整形"""
+    from matplotlib.ticker import MultipleLocator, FormatStrFormatter
     # 単位モードに応じて軸ラベルを設定
     if "CGS" in unit_mode:
         ax.set_xlabel(
@@ -267,7 +268,11 @@ def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
         ax.axhline(0, color="#AAAAAA", linestyle="-", linewidth=1.0)
         ax.axvline(0, color="#AAAAAA", linestyle="-", linewidth=1.0)
     if style_params.get("show_grid", True):
-        ax.grid(True, linestyle=":", color="#CCCCCC")
+        ax.grid(
+            True, 
+            linestyle=style_params.get("grid_style", ":"), 
+            color=style_params.get("grid_color", "#CCCCCC")
+        )
     if (
         style_params.get("xlim_min") is not None
         and style_params.get("xlim_max") is not None
@@ -278,6 +283,35 @@ def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
         and style_params.get("ylim_max") is not None
     ):
         ax.set_ylim(style_params["ylim_min"], style_params["ylim_max"])
+
+    # --- 新しい軸設定 ---
+    if style_params.get("xaxis_step"):
+        try:
+            step = float(style_params["xaxis_step"])
+            if step > 0:
+                ax.xaxis.set_major_locator(MultipleLocator(step))
+        except (ValueError, TypeError):
+            pass  # 無効な値は無視
+    if style_params.get("yaxis_step"):
+        try:
+            step = float(style_params["yaxis_step"])
+            if step > 0:
+                ax.yaxis.set_major_locator(MultipleLocator(step))
+        except (ValueError, TypeError):
+            pass
+
+    if style_params.get("xaxis_format"):
+        try:
+            ax.xaxis.set_major_formatter(FormatStrFormatter(style_params["xaxis_format"]))
+        except (ValueError, TypeError):
+             print(f"警告: 無効なX軸フォーマットです: {style_params['xaxis_format']}")
+    if style_params.get("yaxis_format"):
+        try:
+            ax.yaxis.set_major_formatter(FormatStrFormatter(style_params["yaxis_format"]))
+        except (ValueError, TypeError):
+            print(f"警告: 無効なY軸フォーマットです: {style_params['yaxis_format']}")
+
+
     ax.xaxis.set_minor_locator(AutoMinorLocator(5))
     ax.yaxis.set_minor_locator(AutoMinorLocator(5))
     ax.tick_params(
