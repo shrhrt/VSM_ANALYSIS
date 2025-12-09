@@ -162,7 +162,7 @@ def calculate_remanence(H_down, M_down, H_up, M_up):
             np.interp(0, H_up, M_up),
         )
         Mr_avg = (abs(Mr_down) + abs(Mr_up)) / 2
-        print(f"  残留磁化 Mr: {Mr_avg:.3f} kA/m")
+        # print(f"  残留磁化 Mr: {Mr_avg:.3f} kA/m")
         return Mr_avg
     except Exception as e:
         print(f"  エラー: 残留磁化の計算失敗: {e}")
@@ -177,8 +177,8 @@ def calculate_coercivity(H_down, M_down, H_up, M_up):
             np.interp(0, M_up, H_up),
         )
         Hc_avg = (abs(Hc_down) + abs(Hc_up)) / 2
-        print(f"  保磁力 Hc: {Hc_avg * 10000:.2f} Oe ({Hc_avg:.4f} T)")
-        return Hc_avg
+        # print(f"  保磁力 Hc: {Hc_avg * 10000:.2f} Oe ({Hc_avg:.4f} T)")
+        return {"T": Hc_avg, "Oe": Hc_avg * 10000}
     except Exception as e:
         print(f"  エラー: 保磁力の計算失敗: {e}")
         return None
@@ -233,7 +233,7 @@ def calculate_saturation_magnetization(H, M, pos_range=None, neg_range=None):
         Ms_avg = Ms_neg
 
     print(f"  飽和磁化 Ms: {Ms_avg:.3f} kA/m (正側: {Ms_pos:.3f}, 負側: {Ms_neg:.3f})")
-    return Ms_avg
+    return {"avg": Ms_avg, "pos": Ms_pos, "neg": Ms_neg}
 
 
 def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):

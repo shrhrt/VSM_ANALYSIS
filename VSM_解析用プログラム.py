@@ -80,49 +80,47 @@ class VSMApp:
         main_paned_window = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
         main_paned_window.pack(fill=tk.BOTH, expand=True)
 
+        # --- Left Pane (Single Notebook for all controls and outputs) ---
         left_pane = ttk.Frame(main_paned_window, padding=0)
-        main_paned_window.add(left_pane, weight=1)
+        main_paned_window.add(left_pane, weight=2) # Increased weight for left pane
 
-        left_paned_window = ttk.PanedWindow(left_pane, orient=tk.VERTICAL)
-        left_paned_window.pack(fill=tk.BOTH, expand=True)
+        self.main_notebook = ttk.Notebook(left_pane) # Renamed to main_notebook
+        self.main_notebook.pack(fill=tk.BOTH, expand=True)
+        self.main_notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
-        graph_frame = ttk.LabelFrame(main_paned_window, text=" グラフ ", padding=10)
-        main_paned_window.add(graph_frame, weight=2)
-        graph_frame.grid_rowconfigure(1, weight=1)
-        graph_frame.grid_columnconfigure(0, weight=1)
+        # --- Tab Frames ---
+        tab_analysis = ttk.Frame(self.main_notebook, padding="10")
+        tab_style = ttk.Frame(self.main_notebook, padding="10")
+        self.results_tab = ttk.Frame(self.main_notebook, padding="10") # Use self.results_tab directly
+        tab_export = ttk.Frame(self.main_notebook, padding="10")
+        log_tab = ttk.Frame(self.main_notebook, padding="10")
 
-        notebook_frame = ttk.Frame(left_paned_window, padding=0)
-        left_paned_window.add(notebook_frame, weight=1)
+        # --- Add tabs in specified order ---
+        self.main_notebook.add(tab_analysis, text="解析")
+        self.main_notebook.add(tab_style, text="グラフ設定")
+        self.main_notebook.add(self.results_tab, text="解析結果") # Results after Style
+        self.main_notebook.add(tab_export, text="保存")
+        self.main_notebook.add(log_tab, text="ログ") # Log last
 
-        notebook = ttk.Notebook(notebook_frame)
-        notebook.pack(fill=tk.BOTH, expand=True)
-
-        tab_analysis = ttk.Frame(notebook, padding="10")
-        tab_style = ttk.Frame(notebook, padding="10")
-        tab_export = ttk.Frame(notebook, padding="10")
-        notebook.add(tab_analysis, text="解析")
-        notebook.add(tab_style, text="グラフ設定")
-        notebook.add(tab_export, text="保存")
-
-        log_outer_frame = ttk.Frame(
-            left_paned_window, padding=(0, 10, 0, 0)
-        )  # 上にスペース
-        left_paned_window.add(log_outer_frame, weight=1)
-
-        log_frame = ttk.LabelFrame(log_outer_frame, text=" ログ ", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True)
-
+        # --- Log Text Widget ---
         self.log_text = scrolledtext.ScrolledText(
-            log_frame, wrap=tk.WORD, font=("Consolas", 9), bg="white", fg="black"
+            log_tab, wrap=tk.WORD, font=("Consolas", 9), bg="white", fg="black"
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
-        # --- 各タブのコントロールを作成 ---
+        # --- Right Pane (Graph only) ---
+        graph_frame = ttk.LabelFrame(main_paned_window, text=" グラフ ", padding=10)
+        main_paned_window.add(graph_frame, weight=3) # Decreased weight for graph frame
+        graph_frame.grid_rowconfigure(1, weight=1)
+        graph_frame.grid_columnconfigure(0, weight=1)
+
+        # --- Create controls and results tab structure ---
         self._create_analysis_controls(tab_analysis)
         self._create_style_controls(tab_style)
         self._create_export_controls(tab_export)
+        self._create_results_tab() # Builds the Treeview inside self.results_tab
 
-        # --- グラフ埋め込み ---
+        # --- Embed Graph ---
         self.fig = plt.figure(figsize=(9, 9), facecolor="white")
         self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
@@ -144,6 +142,23 @@ class VSMApp:
 
         self._add_traces()
         self.update_graph()
+
+    def _on_tab_changed(self, event):
+        """Event handler for when the notebook tab is changed."""
+        selected_tab_id = event.widget.select()
+        # Ensure we have a valid tab selected
+        if not selected_tab_id:
+            return
+            
+        try:
+            tab_text = event.widget.tab(selected_tab_id, "text")
+
+            # If the user selects the results tab and it has the notification, reset it
+            if selected_tab_id == str(self.results_tab) and tab_text.endswith("*"):
+                event.widget.tab(selected_tab_id, text="解析結果")
+        except tk.TclError:
+            # This can happen if the tab is in the process of being destroyed
+            pass
 
     def _configure_styles(self):
         bg, fg, entry_bg = "SystemButtonFace", "black", "white"
@@ -849,8 +864,8 @@ class VSMApp:
                 data["demag_settings"] = {
                     "enabled": True,
                     "manual": False,
-                    "pos_range": ("1.5", "2.0"),
-                    "neg_range": ("-2.0", "-1.5"),
+                    "pos_range": ("0.5", "1.2"),
+                    "neg_range": ("-1.2", "-0.5"),
                     "link_ranges": True,
                 }
 
@@ -1209,6 +1224,7 @@ class VSMApp:
         self.info_button.config(state=tk.NORMAL if self.all_metadata else tk.DISABLED)
 
     def _process_and_plot(self, params, unit_mode):
+        self.analysis_results = []
         h_min_global, h_max_global = float("inf"), float("-inf")
         print("読み込みファイル:")
         [print(f" {i + 1}: {d['path'].name}") for i, d in enumerate(self.vsm_data)]
@@ -1293,6 +1309,9 @@ class VSMApp:
                     M_final.iloc[min_H_idx_loop:].values,
                 )
 
+                # Create a dictionary to store results for the current file.
+                file_results = {"filename": file.stem, "Ms": None, "Mr": None, "Hc_Oe": None, "squareness": None}
+
                 # --- 飽和磁化 (Ms) 計算 ---
                 ms_settings = data.get("ms_calc_settings")
                 ms_pos_range, ms_neg_range = None, None
@@ -1330,17 +1349,27 @@ class VSMApp:
                     )
                     ms_pos_range, ms_neg_range = None, None
 
-                Ms_avg = vsm_logic.calculate_saturation_magnetization(
+                Ms_results = vsm_logic.calculate_saturation_magnetization(
                     H_raw, M_final, pos_range=ms_pos_range, neg_range=ms_neg_range
                 )
+                if Ms_results:
+                    file_results["Ms"] = Ms_results.get("avg")
 
                 Mr_avg = vsm_logic.calculate_remanence(H_down, M_down, H_up, M_up)
-                vsm_logic.calculate_coercivity(H_down, M_down, H_up, M_up)
+                file_results["Mr"] = Mr_avg
 
-                if Mr_avg is not None and Ms_avg is not None and Ms_avg > 0:
-                    squareness = Mr_avg / Ms_avg
-                    print(f"  角形比 (S = Mr/Ms): {squareness:.3f}")
+                Hc_results = vsm_logic.calculate_coercivity(H_down, M_down, H_up, M_up)
+                if Hc_results:
+                    file_results["Hc_Oe"] = Hc_results.get("Oe")
 
+                if Mr_avg is not None and file_results["Ms"] is not None and file_results["Ms"] > 0:
+                    squareness = Mr_avg / file_results["Ms"]
+                    file_results["squareness"] = squareness
+
+                self.analysis_results.append(file_results)
+
+                # --- グラフ描画単位の処理 ---
+                Ms_avg = file_results["Ms"] # Keep Ms_avg for normalization logic
                 if "CGS" in unit_mode:
                     H_plot_down, H_plot_up = H_down * 10000, H_up * 10000
                     M_plot_down, M_plot_up = M_down, M_up
@@ -1393,6 +1422,94 @@ class VSMApp:
                 labelcolor="black",
             )
         self.fig.tight_layout()
+        self._update_results_table()
+        self.main_notebook.tab(self.results_tab, text="解析結果 *")
+
+    def _create_results_tab(self):
+        """Creates the structure of the results table tab."""
+        frame = ttk.Frame(self.results_tab, padding="10")
+        frame.pack(expand=True, fill="both")
+
+        # --- Treeview (Table) ---
+        columns = ("filename", "ms", "mr", "hc", "sq")
+        self.results_tree = ttk.Treeview(frame, columns=columns, show="headings")
+        
+        # Define headings
+        self.results_tree.heading("filename", text="ファイル名")
+        self.results_tree.heading("ms", text="飽和磁化 Ms (kA/m)")
+        self.results_tree.heading("mr", text="残留磁化 Mr (kA/m)")
+        self.results_tree.heading("hc", text="保磁力 Hc (Oe)")
+        self.results_tree.heading("sq", text="角形比 (S = Mr/Ms)")
+
+        # Define column properties
+        self.results_tree.column("filename", anchor="w", width=200)
+        self.results_tree.column("ms", anchor="e", width=150)
+        self.results_tree.column("mr", anchor="e", width=150)
+        self.results_tree.column("hc", anchor="e", width=120)
+        self.results_tree.column("sq", anchor="e", width=150)
+
+        # Scrollbars
+        vsb = ttk.Scrollbar(frame, orient="vertical", command=self.results_tree.yview)
+        hsb = ttk.Scrollbar(frame, orient="horizontal", command=self.results_tree.xview)
+        self.results_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        self.results_tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        frame.grid_rowconfigure(0, weight=1)
+        frame.grid_columnconfigure(0, weight=1)
+
+        # --- Action Buttons ---
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+
+        copy_button = ttk.Button(button_frame, text="クリップボードにコピー", command=self._copy_results_to_clipboard)
+        copy_button.pack(side="left", padx=5)
+
+    def _update_results_table(self):
+        """Clears and repopulates the results table with the latest analysis data."""
+        # Clear existing data
+        for i in self.results_tree.get_children():
+            self.results_tree.delete(i)
+        
+        if not self.analysis_results:
+            return
+
+        # Insert new data
+        for res in self.analysis_results:
+            ms_str = f'{res["Ms"]:.3f}' if res["Ms"] is not None else "N/A"
+            mr_str = f'{res["Mr"]:.3f}' if res["Mr"] is not None else "N/A"
+            hc_str = f'{res["Hc_Oe"]:.2f}' if res["Hc_Oe"] is not None else "N/A"
+            sq_str = f'{res["squareness"]:.3f}' if res["squareness"] is not None else "N/A"
+            self.results_tree.insert("", "end", values=(res["filename"], ms_str, mr_str, hc_str, sq_str))
+
+    def _copy_results_to_clipboard(self):
+        if not self.analysis_results:
+            return
+
+        try:
+            # Create header row
+            headers = ["ファイル名", "飽和磁化 Ms (kA/m)", "残留磁化 Mr (kA/m)", "保磁力 Hc (Oe)", "角形比 (S = Mr/Ms)"]
+            tsv_data = "\t".join(headers) + "\n"
+
+            # Create data rows
+            for res in self.analysis_results:
+                ms_str = f'{res["Ms"]:.3f}' if res["Ms"] is not None else ""
+                mr_str = f'{res["Mr"]:.3f}' if res["Mr"] is not None else ""
+                hc_str = f'{res["Hc_Oe"]:.2f}' if res["Hc_Oe"] is not None else ""
+                sq_str = f'{res["squareness"]:.3f}' if res["squareness"] is not None else ""
+                row = [res["filename"], ms_str, mr_str, hc_str, sq_str]
+                tsv_data += "\t".join(row) + "\n"
+
+            self.root.clipboard_clear()
+            self.root.clipboard_append(tsv_data)
+            
+            messagebox.showinfo("成功", "クリップボードにコピーしました。", parent=self.root)
+
+        except Exception as e:
+            messagebox.showerror("エラー", f"コピー中にエラーが発生しました: {e}", parent=self.root)
+
 
 
 if __name__ == "__main__":
