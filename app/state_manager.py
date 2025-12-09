@@ -32,10 +32,11 @@ class StateManager:
         self.save_dpi_var = tk.StringVar(value="300")
 
         # --- 詳細スタイル変数 ---
-        self.x_step_var = tk.StringVar(value="")
-        self.y_step_var = tk.StringVar(value="")
-        self.x_format_var = tk.StringVar(value="%.1f")
-        self.y_format_var = tk.StringVar(value="%.1f")
+        self.x_format_si_var = tk.StringVar(value="%.1f")  # T (Tesla)
+        self.x_format_cgs_var = tk.StringVar(value="%.0f")  # Oe (Oersted)
+        self.y_format_si_var = tk.StringVar(value="%.1f")  # kA/m
+        self.y_format_cgs_var = tk.StringVar(value="%.1f")  # emu/cm^3
+        self.y_format_norm_var = tk.StringVar(value="%.2f")  # M/Ms
         self.grid_style_var = tk.StringVar(value=":")
         self.grid_color_var = tk.StringVar(value="#CCCCCC")
 

@@ -86,20 +86,24 @@ def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
         except (ValueError, TypeError):
             pass
 
-    if style_params.get("xaxis_format"):
+    # 軸フォーマットの適用
+    x_format_str = style_params.get("xaxis_format")
+    y_format_str = style_params.get("yaxis_format")
+
+    if x_format_str:
         try:
-            ax.xaxis.set_major_formatter(
-                FormatStrFormatter(style_params["xaxis_format"])
-            )
+            ax.xaxis.set_major_formatter(FormatStrFormatter(x_format_str))
         except (ValueError, TypeError):
-            print(f"警告: 無効なX軸フォーマットです: {style_params['xaxis_format']}")
-    if style_params.get("yaxis_format"):
+            print(f"警告: 無効なX軸フォーマットです: {x_format_str}")
+            # 無効な場合はデフォルトに戻すか、エラー表示
+            ax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))  # Fallback
+    if y_format_str:
         try:
-            ax.yaxis.set_major_formatter(
-                FormatStrFormatter(style_params["yaxis_format"])
-            )
+            ax.yaxis.set_major_formatter(FormatStrFormatter(y_format_str))
         except (ValueError, TypeError):
-            print(f"警告: 無効なY軸フォーマットです: {style_params['yaxis_format']}")
+            print(f"警告: 無効なY軸フォーマットです: {y_format_str}")
+            # 無効な場合はデフォルトに戻すか、エラー表示
+            ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))  # Fallback
 
     ax.xaxis.set_minor_locator(AutoMinorLocator(5))
     ax.yaxis.set_minor_locator(AutoMinorLocator(5))
@@ -172,6 +176,21 @@ class GraphManager:
                 "ylim_max": float(v)
                 if (v := self.app.state.ylim_max_var.get())
                 else None,
+                "xaxis_format": (
+                    self.app.state.x_format_cgs_var.get()
+                    if "CGS" in unit_mode
+                    else self.app.state.x_format_si_var.get()
+                ),
+                "yaxis_format": (
+                    self.app.state.y_format_cgs_var.get()
+                    if "CGS" in unit_mode
+                    else (
+                        self.app.state.y_format_norm_var.get()
+                        if "Normalized" in unit_mode
+                        else self.app.state.y_format_si_var.get()
+                    )
+                ),
+                # 既存のパラメータ
                 "zero_line_color": self.app.state.zero_line_color_var.get(),
                 "zero_line_linestyle": self.app.state.zero_line_linestyle_var.get(),
             }

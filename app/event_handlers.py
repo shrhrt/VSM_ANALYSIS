@@ -91,7 +91,7 @@ class EventHandlers:
             file_data = {
                 "path": path,
                 "df": df,
-                "thickness_var": tk.StringVar(value="100.0"),
+                "thickness_var": tk.StringVar(value="30.0"),
                 "marker_style_var": tk.StringVar(value="o"),  # 'o' for circle
                 "legend_name_var": tk.StringVar(value=path.stem),
             }
@@ -171,7 +171,10 @@ class EventHandlers:
 
         win = tk.Toplevel(self.app.root)
         win.title("詳細スタイル設定")
-        win.geometry("700x400")
+        # ウィンドウの高さを画面いっぱいに設定
+        screen_height = win.winfo_screenheight()
+        win_height = int(screen_height * 0.85)  # 画面の85%の高さ
+        win.geometry(f"700x{win_height}")
         win.transient(self.app.root)
         win.grab_set()
 
@@ -253,6 +256,64 @@ class EventHandlers:
             )
             combo.grid(row=0, column=1, sticky="ew")
             data["marker_style_var"].trace_add("write", self.app._schedule_update)
+
+        # --- 軸フォーマット設定フレーム ---
+        axis_format_frame = ttk.LabelFrame(
+            main_frame, text="軸の数値フォーマット", padding=10
+        )
+        axis_format_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        axis_format_frame.grid_columnconfigure(1, weight=1)
+        axis_format_frame.grid_columnconfigure(3, weight=1)
+
+        # X軸フォーマット
+        ttk.Label(axis_format_frame, text="X軸 (T):").grid(
+            row=0, column=0, sticky="w", pady=2
+        )
+        ttk.Entry(
+            axis_format_frame, textvariable=self.app.state.x_format_si_var, width=10
+        ).grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(axis_format_frame, text="X軸 (Oe):").grid(
+            row=0, column=2, sticky="w", pady=2
+        )
+        ttk.Entry(
+            axis_format_frame, textvariable=self.app.state.x_format_cgs_var, width=10
+        ).grid(row=0, column=3, sticky="ew", padx=5, pady=2)
+
+        # Y軸フォーマット
+        ttk.Label(axis_format_frame, text="Y軸 (kA/m):").grid(
+            row=1, column=0, sticky="w", pady=2
+        )
+        ttk.Entry(
+            axis_format_frame, textvariable=self.app.state.y_format_si_var, width=10
+        ).grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(axis_format_frame, text="Y軸 (emu/cm³):").grid(
+            row=1, column=2, sticky="w", pady=2
+        )
+        ttk.Entry(
+            axis_format_frame, textvariable=self.app.state.y_format_cgs_var, width=10
+        ).grid(row=1, column=3, sticky="ew", padx=5, pady=2)
+
+        ttk.Label(axis_format_frame, text="Y軸 (M/Ms):").grid(
+            row=2, column=0, sticky="w", pady=2
+        )
+        ttk.Entry(
+            axis_format_frame, textvariable=self.app.state.y_format_norm_var, width=10
+        ).grid(row=2, column=1, sticky="ew", padx=5, pady=2)
+
+        # フォーマット文字列のヒント
+        ttk.Label(
+            axis_format_frame,
+            text="例: %.2f (小数点以下2桁), %.0f (整数), %.1e (指数表記)",
+            font=("Arial", 9, "italic"),
+            foreground="gray",
+        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(5, 0))
+
+        # これらの変数も変更時にグラフを更新するようにトレースを追加
+        self.app.state.x_format_si_var.trace_add("write", self.app._schedule_update)
+        self.app.state.x_format_cgs_var.trace_add("write", self.app._schedule_update)
+        self.app.state.y_format_si_var.trace_add("write", self.app._schedule_update)
+        self.app.state.y_format_cgs_var.trace_add("write", self.app._schedule_update)
+        self.app.state.y_format_norm_var.trace_add("write", self.app._schedule_update)
 
         # --- ボタンフレーム ---
         button_frame = ttk.Frame(main_frame)
@@ -591,7 +652,7 @@ class EventHandlers:
                 df, _ = file_io.load_vsm_file(path)
                 new_data = {"path": path, "df": df}
                 new_data["thickness_var"] = tk.StringVar(
-                    value=file_data.get("thickness", "100.0")
+                    value=file_data.get("thickness", "30.0")
                 )
                 new_data["marker_style_var"] = tk.StringVar(
                     value=file_data.get("marker_style", "o")

@@ -495,6 +495,11 @@ class VSMApp:
             self.state.show_zero_lines_var,
             self.state.zero_line_color_var,
             self.state.zero_line_linestyle_var,
+            self.state.x_format_si_var,
+            self.state.x_format_cgs_var,
+            self.state.y_format_si_var,
+            self.state.y_format_cgs_var,
+            self.state.y_format_norm_var,
             self.state.unit_mode_var,
         ]
         for var in trace_vars:
