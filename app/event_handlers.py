@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import tkinter as tk
 from pathlib import Path
+import json
 from tkinter import TclError, filedialog, messagebox, scrolledtext, ttk, colorchooser
 
 import analysis.file_io as file_io
@@ -91,6 +92,7 @@ class EventHandlers:
                 "path": path,
                 "df": df,
                 "thickness_var": tk.StringVar(value="100.0"),
+                "legend_name_var": tk.StringVar(value=path.stem),
             }
             self.app.vsm_data.append(file_data)
 
@@ -157,6 +159,67 @@ class EventHandlers:
         finally:
             self.app.fig.set_size_inches(original_size)
             self.app.canvas.draw_idle()
+
+    def show_advanced_style_window(self):
+        """凡例名などを設定する詳細ウィンドウを表示する"""
+        if not self.app.vsm_data:
+            messagebox.showinfo(
+                "情報", "設定対象のファイルがありません。", parent=self.app.root
+            )
+            return
+
+        win = tk.Toplevel(self.app.root)
+        win.title("詳細スタイル設定")
+        win.geometry("600x400")
+        win.transient(self.app.root)
+        win.grab_set()
+
+        main_frame = ttk.Frame(win, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # --- 凡例設定フレーム ---
+        legend_frame = ttk.LabelFrame(main_frame, text="凡例名の設定", padding=10)
+        legend_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        canvas = tk.Canvas(
+            legend_frame,
+            borderwidth=0,
+            background=self.app.style.lookup(".", "background"),
+            highlightthickness=0,
+        )
+        scrollbar = ttk.Scrollbar(legend_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas, padding=(0, 0, 10, 0))
+
+        scrollable_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        for i, data in enumerate(self.app.vsm_data):
+            row = ttk.Frame(scrollable_frame)
+            row.pack(fill=tk.X, pady=3)
+            row.grid_columnconfigure(1, weight=1)
+
+            ttk.Label(row, text=f"ファイル{i + 1}:").grid(
+                row=0, column=0, sticky="w", padx=(0, 10)
+            )
+            entry = ttk.Entry(row, textvariable=data["legend_name_var"])
+            entry.grid(row=0, column=1, sticky="ew")
+            data["legend_name_var"].trace_add("write", self.app._schedule_update)
+
+        # --- ボタンフレーム ---
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, side=tk.BOTTOM)
+
+        def on_ok():
+            self.app.graph_manager.update_graph()
+            win.destroy()
+
+        ok_button = ttk.Button(button_frame, text="OK", command=on_ok)
+        ok_button.pack()
 
     def show_ms_settings_window(self):
         settings_window = tk.Toplevel(self.app.root)
@@ -400,3 +463,110 @@ class EventHandlers:
             "一番上のファイルの設定をすべてのファイルに適用しました。",
             parent=self.app.root,
         )
+
+    def save_session(self):
+        """現在のセッション（設定とファイルリスト）をJSONファイルに保存する"""
+        if not self.app.vsm_data:
+            messagebox.showwarning(
+                "保存エラー", "保存するデータがありません。", parent=self.app.root
+            )
+            return
+
+        filepath = filedialog.asksaveasfilename(
+            title="セッションを保存",
+            filetypes=[("VSM Session Files", "*.vsm_session"), ("All files", "*.*")],
+            defaultextension=".vsm_session",
+            parent=self.app.root,
+        )
+        if not filepath:
+            return
+
+        try:
+            session_data = {
+                "global_settings": self.app.state.to_dict(),
+                "file_specific_data": [],
+            }
+
+            for i, data in enumerate(self.app.vsm_data):
+                file_data = {
+                    "path": str(data["path"].resolve()),
+                    "thickness": data["thickness_var"].get(),
+                    "legend_name": data["legend_name_var"].get(),
+                    "color": self.app.file_color_vars[i].get(),
+                    "demag_settings": data.get("demag_settings", {}),
+                    "ms_calc_settings": data.get("ms_calc_settings", {}),
+                }
+                session_data["file_specific_data"].append(file_data)
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(session_data, f, indent=4, ensure_ascii=False)
+
+            messagebox.showinfo(
+                "成功", "セッションを保存しました。", parent=self.app.root
+            )
+
+        except Exception as e:
+            messagebox.showerror(
+                "保存エラー",
+                f"セッションの保存中にエラーが発生しました:\n{e}",
+                parent=self.app.root,
+            )
+
+    def load_session(self):
+        """JSONファイルからセッションを読み込む"""
+        filepath = filedialog.askopenfilename(
+            title="セッションを読み込み",
+            filetypes=[("VSM Session Files", "*.vsm_session"), ("All files", "*.*")],
+            parent=self.app.root,
+        )
+        if not filepath:
+            return
+
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                session_data = json.load(f)
+
+            # グローバル設定を復元
+            self.app.state.from_dict(session_data.get("global_settings", {}))
+
+            # ファイルリストをクリアして再構築
+            self.app.vsm_data = []
+            self.app.file_color_vars = []
+
+            for file_data in session_data.get("file_specific_data", []):
+                path = Path(file_data["path"])
+                if not path.exists():
+                    messagebox.showwarning(
+                        "ファイル欠落",
+                        f"ファイルが見つかりません:\n{path}\nスキップします。",
+                        parent=self.app.root,
+                    )
+                    continue
+
+                df, _ = file_io.load_vsm_file(path)
+                new_data = {"path": path, "df": df}
+                new_data["thickness_var"] = tk.StringVar(
+                    value=file_data.get("thickness", "100.0")
+                )
+                new_data["legend_name_var"] = tk.StringVar(
+                    value=file_data.get("legend_name", path.stem)
+                )
+                new_data["demag_settings"] = file_data.get("demag_settings", {})
+                new_data["ms_calc_settings"] = file_data.get("ms_calc_settings", {})
+                self.app.vsm_data.append(new_data)
+                self.app.file_color_vars.append(
+                    tk.StringVar(value=file_data.get("color", "#000000"))
+                )
+
+            # UIを更新してグラフを再描画
+            self.app._update_file_list_ui()
+            self.app._update_demag_settings_ui()
+            self.app._update_thickness_settings_ui()
+            self.app.graph_manager.update_graph()
+
+        except Exception as e:
+            messagebox.showerror(
+                "読込エラー",
+                f"セッションの読み込み中にエラーが発生しました:\n{e}",
+                parent=self.app.root,
+            )

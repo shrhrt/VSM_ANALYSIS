@@ -6,6 +6,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser
 import sys
+import json
 from contextlib import redirect_stdout
 import io
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -50,6 +51,8 @@ class VSMApp:
         self.style.theme_use("clam")
         self._configure_styles()
         self.root.configure(bg=self.style.lookup(".", "background"))
+
+        self._create_menu()
 
         # --- メインレイアウト (PanedWindowベース) ---
         main_frame = ttk.Frame(root, padding="10")
@@ -127,6 +130,22 @@ class VSMApp:
 
         self._add_traces()
         self.graph_manager.update_graph()
+
+    def _create_menu(self):
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="ファイル", menu=file_menu)
+
+        file_menu.add_command(
+            label="セッションを読み込み...",
+            command=lambda: self.event_handlers.load_session(),
+        )
+        file_menu.add_command(
+            label="セッションを保存...",
+            command=lambda: self.event_handlers.save_session(),
+        )
 
     def _on_tab_changed(self, event):
         """Event handler for when the notebook tab is changed."""
@@ -326,6 +345,30 @@ class VSMApp:
             text="原点線を表示",
             variable=self.state.show_zero_lines_var,
         ).pack(anchor="w", pady=(5, 0))
+
+        # 原点線の色と線種設定
+        zero_line_settings_frame = ttk.Frame(axis_grid_frame)
+        zero_line_settings_frame.pack(fill=tk.X, padx=15, pady=(0, 5))
+        zero_line_settings_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(zero_line_settings_frame, text="色:").grid(
+            row=0, column=0, sticky="w"
+        )
+        ttk.Combobox(
+            zero_line_settings_frame,
+            textvariable=self.state.zero_line_color_var,
+            values=["black", "grey", "red", "blue", "green"],
+        ).grid(row=0, column=1, sticky="ew", padx=5)
+
+        ttk.Label(zero_line_settings_frame, text="線種:").grid(
+            row=1, column=0, sticky="w", pady=(5, 0)
+        )
+        ttk.Combobox(
+            zero_line_settings_frame,
+            textvariable=self.state.zero_line_linestyle_var,
+            values=["-", "--", "-.", ":"],  # Solid, Dashed, Dash-dot, Dotted
+            state="readonly",
+        ).grid(row=1, column=1, sticky="ew", padx=5, pady=(5, 0))
         plot_frame = ttk.LabelFrame(parent, text=" プロット ", padding="10")
         plot_frame.pack(fill=tk.X, pady=(0, 10))
         plot_frame.grid_columnconfigure(1, weight=1)
@@ -374,7 +417,7 @@ class VSMApp:
         ttk.Button(
             adv_settings_frame,
             text="軸・凡例・線のスタイルを設定...",
-            command=self._show_advanced_style_window,
+            command=self.event_handlers.show_advanced_style_window,
         ).pack(fill=tk.X, pady=5)
 
         axes_frame = ttk.LabelFrame(parent, text=" 描画範囲 ", padding="10")
@@ -399,10 +442,6 @@ class VSMApp:
         ttk.Entry(axes_frame, textvariable=self.state.ylim_max_var, width=7).grid(
             row=1, column=3, sticky="ew", pady=(5, 0)
         )
-
-    def _show_advanced_style_window(self):
-        # このメソッドは次のステップで実装します
-        messagebox.showinfo("未実装", "この機能は現在開発中です。", parent=self.root)
 
     def _create_export_controls(self, parent):
         save_settings_frame = ttk.LabelFrame(
@@ -456,6 +495,8 @@ class VSMApp:
             self.state.ylim_max_var,
             self.state.show_grid_var,
             self.state.show_zero_lines_var,
+            self.state.zero_line_color_var,
+            self.state.zero_line_linestyle_var,
             self.state.unit_mode_var,
         ]
         for var in trace_vars:

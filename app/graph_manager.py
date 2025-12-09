@@ -45,8 +45,14 @@ def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
         )
 
     if style_params.get("show_zero_lines", True):
-        ax.axhline(0, color="#AAAAAA", linestyle="-", linewidth=1.0)
-        ax.axvline(0, color="#AAAAAA", linestyle="-", linewidth=1.0)
+        zero_line_color = style_params.get("zero_line_color", "grey")
+        zero_line_linestyle = style_params.get("zero_line_linestyle", "-")
+        ax.axhline(
+            0, color=zero_line_color, linestyle=zero_line_linestyle, linewidth=1.0
+        )
+        ax.axvline(
+            0, color=zero_line_color, linestyle=zero_line_linestyle, linewidth=1.0
+        )
     if style_params.get("show_grid", True):
         ax.grid(
             True,
@@ -166,6 +172,8 @@ class GraphManager:
                 "ylim_max": float(v)
                 if (v := self.app.state.ylim_max_var.get())
                 else None,
+                "zero_line_color": self.app.state.zero_line_color_var.get(),
+                "zero_line_linestyle": self.app.state.zero_line_linestyle_var.get(),
             }
         except ValueError:
             return
@@ -380,7 +388,11 @@ class GraphManager:
                 }
                 self.app.ax.plot(H_plot_down, M_plot_down, color=color, **plot_kwargs)
                 self.app.ax.plot(
-                    H_plot_up, M_plot_up, color=color, label=file.stem, **plot_kwargs
+                    H_plot_up,
+                    M_plot_up,
+                    color=color,
+                    label=data["legend_name_var"].get(),
+                    **plot_kwargs,
                 )
 
                 if "CGS" in unit_mode:

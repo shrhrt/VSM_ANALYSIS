@@ -25,6 +25,8 @@ class StateManager:
         self.ylim_max_var = tk.StringVar(value="")
         self.show_grid_var = tk.BooleanVar(value=True)
         self.show_zero_lines_var = tk.BooleanVar(value=True)
+        self.zero_line_color_var = tk.StringVar(value="grey")
+        self.zero_line_linestyle_var = tk.StringVar(value="-")
         self.save_width_var = tk.StringVar(value="6.0")
         self.save_height_var = tk.StringVar(value="6.0")
         self.save_dpi_var = tk.StringVar(value="300")
@@ -36,3 +38,26 @@ class StateManager:
         self.y_format_var = tk.StringVar(value="%.1f")
         self.grid_style_var = tk.StringVar(value=":")
         self.grid_color_var = tk.StringVar(value="#CCCCCC")
+
+    def to_dict(self):
+        """現在の状態を辞書に変換して返す"""
+        state_dict = {}
+        for key, value in self.__dict__.items():
+            if isinstance(
+                value, (tk.StringVar, tk.BooleanVar, tk.IntVar, tk.DoubleVar)
+            ):
+                state_dict[key] = value.get()
+        return state_dict
+
+    def from_dict(self, state_dict):
+        """辞書から状態を復元する"""
+        for key, value in state_dict.items():
+            if hasattr(self, key):
+                var = getattr(self, key)
+                if isinstance(
+                    var, (tk.StringVar, tk.BooleanVar, tk.IntVar, tk.DoubleVar)
+                ):
+                    try:
+                        var.set(value)
+                    except tk.TclError as e:
+                        print(f"Warning: Could not set state for '{key}': {e}")
