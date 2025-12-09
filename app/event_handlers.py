@@ -92,6 +92,7 @@ class EventHandlers:
                 "path": path,
                 "df": df,
                 "thickness_var": tk.StringVar(value="100.0"),
+                "marker_style_var": tk.StringVar(value="o"),  # 'o' for circle
                 "legend_name_var": tk.StringVar(value=path.stem),
             }
             self.app.vsm_data.append(file_data)
@@ -170,7 +171,7 @@ class EventHandlers:
 
         win = tk.Toplevel(self.app.root)
         win.title("詳細スタイル設定")
-        win.geometry("600x400")
+        win.geometry("700x400")
         win.transient(self.app.root)
         win.grab_set()
 
@@ -206,9 +207,52 @@ class EventHandlers:
             ttk.Label(row, text=f"ファイル{i + 1}:").grid(
                 row=0, column=0, sticky="w", padx=(0, 10)
             )
-            entry = ttk.Entry(row, textvariable=data["legend_name_var"])
+            entry = ttk.Entry(row, textvariable=data["legend_name_var"], width=50)
             entry.grid(row=0, column=1, sticky="ew")
             data["legend_name_var"].trace_add("write", self.app._schedule_update)
+
+        # --- マーカー設定フレーム ---
+        marker_frame = ttk.LabelFrame(main_frame, text="マーカーの形状", padding=10)
+        marker_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        marker_canvas = tk.Canvas(
+            marker_frame,
+            borderwidth=0,
+            background=self.app.style.lookup(".", "background"),
+            highlightthickness=0,
+        )
+        marker_scrollbar = ttk.Scrollbar(
+            marker_frame, orient="vertical", command=marker_canvas.yview
+        )
+        marker_scrollable_frame = ttk.Frame(marker_canvas, padding=(0, 0, 10, 0))
+
+        marker_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: marker_canvas.configure(scrollregion=marker_canvas.bbox("all")),
+        )
+        marker_canvas.create_window((0, 0), window=marker_scrollable_frame, anchor="nw")
+        marker_canvas.configure(yscrollcommand=marker_scrollbar.set)
+        marker_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        marker_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        marker_options = ["o", "s", "^", "v", "D", "p", "*", "x", "+"]
+
+        for i, data in enumerate(self.app.vsm_data):
+            row = ttk.Frame(marker_scrollable_frame)
+            row.pack(fill=tk.X, pady=3)
+            row.grid_columnconfigure(1, weight=1)
+
+            ttk.Label(row, text=f"ファイル{i + 1}:").grid(
+                row=0, column=0, sticky="w", padx=(0, 10)
+            )
+            combo = ttk.Combobox(
+                row,
+                textvariable=data["marker_style_var"],
+                values=marker_options,
+                state="readonly",
+            )
+            combo.grid(row=0, column=1, sticky="ew")
+            data["marker_style_var"].trace_add("write", self.app._schedule_update)
 
         # --- ボタンフレーム ---
         button_frame = ttk.Frame(main_frame)
@@ -491,6 +535,7 @@ class EventHandlers:
                 file_data = {
                     "path": str(data["path"].resolve()),
                     "thickness": data["thickness_var"].get(),
+                    "marker_style": data["marker_style_var"].get(),
                     "legend_name": data["legend_name_var"].get(),
                     "color": self.app.file_color_vars[i].get(),
                     "demag_settings": data.get("demag_settings", {}),
@@ -547,6 +592,9 @@ class EventHandlers:
                 new_data = {"path": path, "df": df}
                 new_data["thickness_var"] = tk.StringVar(
                     value=file_data.get("thickness", "100.0")
+                )
+                new_data["marker_style_var"] = tk.StringVar(
+                    value=file_data.get("marker_style", "o")
                 )
                 new_data["legend_name_var"] = tk.StringVar(
                     value=file_data.get("legend_name", path.stem)

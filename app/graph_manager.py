@@ -381,7 +381,7 @@ class GraphManager:
 
                 color = self.app.file_color_vars[idx].get()
                 plot_kwargs = {
-                    "marker": "o",
+                    "marker": data["marker_style_var"].get(),
                     "markersize": params["marker_size"],
                     "linestyle": "-",
                     "linewidth": params["line_width"],

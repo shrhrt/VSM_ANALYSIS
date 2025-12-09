@@ -30,17 +30,15 @@ class VSMApp:
         self.analysis_results = []
         self.file_color_vars = []
         self.state = state_manager.StateManager()
-        self.base_colors = [
-            "#1f77b4",
-            "#ff7f0e",
-            "#2ca02c",
-            "#d62728",
-            "#9467bd",
-            "#8c564b",
-            "#e377c2",
-            "#7f7f7f",
-            "#bcbd22",
-            "#17becf",
+        self.base_colors = [  # 1本目を赤、2本目を青、3本目を黄緑に設定
+            "red",
+            "blue",
+            "limegreen",
+            "purple",  # 4本目
+            "orange",  # 5本目
+            "cyan",  # 6本目
+            "magenta",  # 7本目
+            "brown",  # 8本目
         ]
 
         self.root = root
@@ -822,8 +820,11 @@ class VSMApp:
         frame.pack(expand=True, fill="both")
 
         # --- Treeview (Table) ---
-        columns = ("filename", "ms", "mr", "hc", "sq")
-        self.results_tree = ttk.Treeview(frame, columns=columns, show="headings")
+        columns = ("filename", "ms", "mr", "hc", "sq")  # 列の定義
+        # selectmode="extended" を追加して複数行選択を可能にする
+        self.results_tree = ttk.Treeview(
+            frame, columns=columns, show="headings", selectmode="extended"
+        )
 
         # Define headings
         self.results_tree.heading("filename", text="ファイル名")
@@ -888,7 +889,7 @@ class VSMApp:
             return
 
         try:
-            # Create header row
+            # ヘッダー行を作成
             headers = [
                 "ファイル名",
                 "飽和磁化 Ms (kA/m)",
@@ -896,26 +897,39 @@ class VSMApp:
                 "保磁力 Hc (Oe)",
                 "角形比 (S = Mr/Ms)",
             ]
-            tsv_data = "\t".join(headers) + "\n"
+            tsv_data_lines = ["\t".join(headers)]
 
-            # Create data rows
-            for res in self.analysis_results:
-                ms_str = f"{res['Ms']:.3f}" if res["Ms"] is not None else ""
-                mr_str = f"{res['Mr']:.3f}" if res["Mr"] is not None else ""
-                hc_str = f"{res['Hc_Oe']:.2f}" if res["Hc_Oe"] is not None else ""
-                sq_str = (
-                    f"{res['squareness']:.3f}" if res["squareness"] is not None else ""
-                )
-                row = [res["filename"], ms_str, mr_str, hc_str, sq_str]
-                tsv_data += "\t".join(row) + "\n"
+            selected_items = self.results_tree.selection()  # 選択された行のIDを取得
+
+            if selected_items:
+                # 選択された行のデータをコピー
+                for item_id in selected_items:
+                    values = self.results_tree.item(item_id, "values")
+                    tsv_data_lines.append(
+                        "\t".join(map(str, values))
+                    )  # 値を文字列に変換してTSV形式で追加
+                message_suffix = "選択された行をクリップボードにコピーしました。"
+            else:
+                # 選択された行がなければ、すべての行のデータをコピー
+                for res in self.analysis_results:
+                    ms_str = f"{res['Ms']:.3f}" if res["Ms"] is not None else ""
+                    mr_str = f"{res['Mr']:.3f}" if res["Mr"] is not None else ""
+                    hc_str = f"{res['Hc_Oe']:.2f}" if res["Hc_Oe"] is not None else ""
+                    sq_str = (
+                        f"{res['squareness']:.3f}"
+                        if res["squareness"] is not None
+                        else ""
+                    )
+                    row = [res["filename"], ms_str, mr_str, hc_str, sq_str]
+                    tsv_data_lines.append("\t".join(row))
+                message_suffix = "すべての解析結果をクリップボードにコピーしました。"
+
+            tsv_data = "\n".join(tsv_data_lines)  # 全ての行を改行で結合
 
             self.root.clipboard_clear()
             self.root.clipboard_append(tsv_data)
 
-            messagebox.showinfo(
-                "成功", "クリップボードにコピーしました。", parent=self.root
-            )
-
+            messagebox.showinfo("成功", message_suffix, parent=self.root)
         except Exception as e:
             messagebox.showerror(
                 "エラー", f"コピー中にエラーが発生しました: {e}", parent=self.root
