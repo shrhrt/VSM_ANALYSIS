@@ -110,6 +110,73 @@ class EventHandlers:
         self.app._update_thickness_settings_ui()
         self.app.graph_manager.update_graph()
 
+    def add_files(self):
+        """既存のデータを保持したままファイルを追加する"""
+        files = filedialog.askopenfilenames(
+            title="追加するVSMファイルを選択",
+            filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
+            parent=self.app.root,
+        )
+        if not files:
+            return
+
+        # 色の割り当て用インデックス（既存のファイル数からスタート）
+        start_idx = len(self.app.vsm_data)
+
+        for i, file_path in enumerate(files):
+            df, error_message = file_io.load_vsm_file(file_path)
+
+            if error_message:
+                messagebox.showerror("読込エラー", error_message, parent=self.app.root)
+                continue
+
+            path = Path(file_path)
+            file_data = {
+                "path": path,
+                "df": df,
+                "thickness_var": tk.StringVar(value="30.0"),
+                "marker_style_var": tk.StringVar(value="o"),
+                "legend_name_var": tk.StringVar(value=path.stem),
+            }
+            self.app.vsm_data.append(file_data)
+
+            # 色を順番に割り当て
+            color_idx = (start_idx + i) % len(self.app.base_colors)
+            color_var = tk.StringVar(
+                value=self.app.base_colors[color_idx]
+            )
+            self.app.file_color_vars.append(color_var)
+
+        self.app.info_button.config(
+            state=tk.NORMAL if self.app.vsm_data else tk.DISABLED
+        )
+        self.app._update_file_list_ui()
+        self.app._update_demag_settings_ui()
+        self.app._update_thickness_settings_ui()
+        self.app.graph_manager.update_graph()
+
+    def remove_file(self, index):
+        """指定されたインデックスのファイルをリストから削除する"""
+        if 0 <= index < len(self.app.vsm_data):
+            filename = self.app.vsm_data[index]["path"].name
+            if not messagebox.askyesno(
+                "削除確認",
+                f"'{filename}' をリストから削除しますか？",
+                parent=self.app.root,
+            ):
+                return
+
+            del self.app.vsm_data[index]
+            del self.app.file_color_vars[index]
+            
+            self.app.info_button.config(
+                state=tk.NORMAL if self.app.vsm_data else tk.DISABLED
+            )
+            self.app._update_file_list_ui()
+            self.app._update_demag_settings_ui()
+            self.app._update_thickness_settings_ui()
+            self.app.graph_manager.update_graph()
+
     def save_figure(self):
         try:
             w, h, dpi = (
@@ -171,7 +238,7 @@ class EventHandlers:
 
         win = tk.Toplevel(self.app.root)
         win.title("詳細スタイル設定")
-        # ウィンドウの高さを画面いっぱいに設定
+        # ウィンドウのサイズを調整
         screen_height = win.winfo_screenheight()
         win_height = int(screen_height * 0.85)  # 画面の85%の高さ
         win.geometry(f"700x{win_height}")
@@ -214,47 +281,108 @@ class EventHandlers:
             entry.grid(row=0, column=1, sticky="ew")
             data["legend_name_var"].trace_add("write", self.app._schedule_update)
 
+        # --- ヒントを追加 ---
+        hint_label = ttk.Label(
+            scrollable_frame,
+            text="ヒント: 下付き文字やギリシャ文字(γ)は TeX 形式で入力できます (例: $H_2O$, $\gamma$)",
+            font=("Arial", 9, "italic"),
+            foreground="gray",
+        )
+        hint_label.pack(fill=tk.X, pady=(10, 0), padx=5)
+
+        # --- 凡例ボックス設定フレーム ---
+        legend_box_frame = ttk.LabelFrame(
+            main_frame, text="凡例ボックス設定", padding=10
+        )
+        legend_box_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        legend_box_frame.grid_columnconfigure(1, weight=1)
+
+        # 配置場所
+        ttk.Label(legend_box_frame, text="配置場所:").grid(
+            row=0, column=0, sticky="w", pady=2
+        )
+        location_options = [
+            "best",
+            "upper right",
+            "upper left",
+            "lower left",
+            "lower right",
+            "right",
+            "center left",
+            "center right",
+            "lower center",
+            "upper center",
+            "center",
+        ]
+        ttk.Combobox(
+            legend_box_frame,
+            textvariable=self.app.state.legend_location_var,
+            values=location_options,
+            state="readonly",
+        ).grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+
+        # 枠線
+        ttk.Checkbutton(
+            legend_box_frame,
+            text="枠線を表示",
+            variable=self.app.state.legend_show_frame_var,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
+
+        # 背景の透明度
+        ttk.Label(legend_box_frame, text="背景の透明度:").grid(
+            row=2, column=0, sticky="w", pady=2
+        )
+        ttk.Scale(
+            legend_box_frame,
+            from_=0.0,
+            to=1.0,
+            orient="horizontal",
+            variable=self.app.state.legend_alpha_var,
+            command=lambda s: self.app.state.legend_alpha_var.set(float(s)),
+        ).grid(row=2, column=1, sticky="ew", padx=5, pady=2)
+
+        # 列数
+        ttk.Label(legend_box_frame, text="列数:").grid(
+            row=3, column=0, sticky="w", pady=2
+        )
+        ttk.Entry(
+            legend_box_frame, textvariable=self.app.state.legend_columns_var, width=10
+        ).grid(row=3, column=1, sticky="ew", padx=5, pady=2)
+
+        # トレースの追加
+        self.app.state.legend_location_var.trace_add("write", self.app._schedule_update)
+        self.app.state.legend_show_frame_var.trace_add(
+            "write", self.app._schedule_update
+        )
+        self.app.state.legend_alpha_var.trace_add("write", self.app._schedule_update)
+        self.app.state.legend_columns_var.trace_add("write", self.app._schedule_update)
+
         # --- マーカー設定フレーム ---
         marker_frame = ttk.LabelFrame(main_frame, text="マーカーの形状", padding=10)
-        marker_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        marker_canvas = tk.Canvas(
-            marker_frame,
-            borderwidth=0,
-            background=self.app.style.lookup(".", "background"),
-            highlightthickness=0,
-        )
-        marker_scrollbar = ttk.Scrollbar(
-            marker_frame, orient="vertical", command=marker_canvas.yview
-        )
-        marker_scrollable_frame = ttk.Frame(marker_canvas, padding=(0, 0, 10, 0))
-
-        marker_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: marker_canvas.configure(scrollregion=marker_canvas.bbox("all")),
-        )
-        marker_canvas.create_window((0, 0), window=marker_scrollable_frame, anchor="nw")
-        marker_canvas.configure(yscrollcommand=marker_scrollbar.set)
-        marker_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        marker_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        marker_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
 
         marker_options = ["o", "s", "^", "v", "D", "p", "*", "x", "+"]
+        num_columns = 4
 
         for i, data in enumerate(self.app.vsm_data):
-            row = ttk.Frame(marker_scrollable_frame)
-            row.pack(fill=tk.X, pady=3)
-            row.grid_columnconfigure(1, weight=1)
+            row_idx = i // num_columns
+            col_idx = i % num_columns
 
-            ttk.Label(row, text=f"ファイル{i + 1}:").grid(
-                row=0, column=0, sticky="w", padx=(0, 10)
+            # Create a sub-frame for each item
+            item_frame = ttk.Frame(marker_frame)
+            item_frame.grid(row=row_idx, column=col_idx, padx=10, pady=5, sticky="ew")
+
+            ttk.Label(item_frame, text=f"ファイル{i + 1}:").pack(
+                side=tk.LEFT, padx=(0, 5)
             )
             combo = ttk.Combobox(
-                row,
+                item_frame,
                 textvariable=data["marker_style_var"],
                 values=marker_options,
                 state="readonly",
+                width=5,
             )
-            combo.grid(row=0, column=1, sticky="ew")
+            combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
             data["marker_style_var"].trace_add("write", self.app._schedule_update)
 
         # --- 軸フォーマット設定フレーム ---

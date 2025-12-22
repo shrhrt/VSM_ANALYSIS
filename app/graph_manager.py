@@ -135,8 +135,6 @@ def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
     ax.title.set_color("black")
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
-    plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["font.sans-serif"] = ["Arial"]
 
 
 class GraphManager:
@@ -152,7 +150,6 @@ class GraphManager:
 
         try:
             params = {
-                "Area": float(self.app.state.area_var.get()),
                 "marker_size": float(self.app.state.marker_size_var.get()),
                 "line_width": float(self.app.state.line_width_var.get()),
                 "axis_label_fontsize": int(
@@ -164,6 +161,10 @@ class GraphManager:
                 "legend_fontsize": int(self.app.state.legend_fontsize_var.get()),
                 "show_grid": self.app.state.show_grid_var.get(),
                 "show_zero_lines": self.app.state.show_zero_lines_var.get(),
+                "legend_location": self.app.state.legend_location_var.get(),
+                "legend_show_frame": self.app.state.legend_show_frame_var.get(),
+                "legend_alpha": self.app.state.legend_alpha_var.get(),
+                "legend_columns": int(self.app.state.legend_columns_var.get()),
                 "xlim_min": float(v)
                 if (v := self.app.state.xlim_min_var.get())
                 else None,
@@ -198,6 +199,8 @@ class GraphManager:
             return
 
         if not self.app.vsm_data:
+            self.app.analysis_results = []
+            self.app._update_results_table()
             format_axis(self.app.ax, self.app.fig, params, unit_mode)
             self.app.ax.text(
                 0.5,
@@ -216,7 +219,7 @@ class GraphManager:
 
         output_stream = io.StringIO()
         with redirect_stdout(output_stream):
-            print(f"解析開始: 面積={params['Area']} cm²\n")
+            print(f"解析開始\n")
             self._process_and_plot(params, unit_mode)
 
         self.app.log_message(output_stream.getvalue())
@@ -236,7 +239,10 @@ class GraphManager:
             file, df = data["path"], data["df"]
             try:
                 thick_nm = float(data["thickness_var"].get())
-                Vol = params["Area"] * thick_nm * 1e-7
+                # 面積 (mm^2) を取得。デフォルトは100
+                area_mm2 = float(data.get("area_var", tk.StringVar(value="100")).get())
+                # 体積 (cm^3) = 面積(mm^2) * 1e-2 * 膜厚(nm) * 1e-7 = 面積 * 膜厚 * 1e-9
+                Vol = area_mm2 * thick_nm * 1e-9
 
                 self.app.all_metadata[file.name] = file_io.parse_metadata(file)
                 min_H_idx = df["H(Oe)"].idxmin()
@@ -246,7 +252,7 @@ class GraphManager:
                 df_loop = df.iloc[: max_H_idx2 + 1]
                 H_raw, M_raw = df_loop["H(Oe)"] * 1e-4, df_loop["M(emu)"] / Vol
                 print(
-                    f"\n--- 解析: {file.stem} (膜厚: {thick_nm} nm, データ点: {len(H_raw)}) ---"
+                    f"\n--- 解析: {file.stem} (膜厚: {thick_nm} nm, 面積: {area_mm2} mm², 体積: {Vol:.4e} cm³, データ点: {len(H_raw)}) ---"
                 )
 
                 # --- 反磁性補正 ---
@@ -410,7 +416,7 @@ class GraphManager:
                     H_plot_up,
                     M_plot_up,
                     color=color,
-                    label=data["legend_name_var"].get(),
+                    label=rf'{data["legend_name_var"].get()}',
                     **plot_kwargs,
                 )
 
@@ -435,13 +441,15 @@ class GraphManager:
         if self.app.state.show_legend_var.get() and any(
             self.app.ax.get_legend_handles_labels()[1]
         ):
-            self.app.ax.legend(
-                fontsize=params["legend_fontsize"],
-                loc="best",
-                facecolor="white",
-                edgecolor="#DDDDDD",
+            legend = self.app.ax.legend(
+                fontsize=params.get("legend_fontsize", 12),
+                loc=params.get("legend_location", "best"),
+                frameon=params.get("legend_show_frame", True),
+                ncol=params.get("legend_columns", 1),
                 labelcolor="black",
             )
+            if legend:
+                legend.get_frame().set_alpha(params.get("legend_alpha", 1.0))
         self.app.fig.tight_layout()
         self.app._update_results_table()
         self.app.main_notebook.tab(self.app.results_tab, text="解析結果 *")

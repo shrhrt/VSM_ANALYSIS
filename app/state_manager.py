@@ -16,17 +16,22 @@ class StateManager:
         self.unit_mode_var = tk.StringVar(value="SI (T, kA/m)")
         self.marker_size_var = tk.StringVar(value="0")  # マーカーサイズ初期値を0に設定
         self.line_width_var = tk.StringVar(value="1.5")
-        self.axis_label_fontsize_var = tk.StringVar(value="16")
-        self.tick_label_fontsize_var = tk.StringVar(value="12")
-        self.legend_fontsize_var = tk.StringVar(value="12")
+        self.axis_label_fontsize_var = tk.StringVar(value="24")
+        self.tick_label_fontsize_var = tk.StringVar(value="16")
+        self.legend_fontsize_var = tk.StringVar(value="16")
+        self.legend_location_var = tk.StringVar(value="best")
+        self.legend_show_frame_var = tk.BooleanVar(value=True)
+        self.legend_alpha_var = tk.DoubleVar(value=1.0)
+        self.legend_columns_var = tk.StringVar(value="1")
+
         self.xlim_min_var = tk.StringVar(value="-1.0")
         self.xlim_max_var = tk.StringVar(value="1.0")
         self.ylim_min_var = tk.StringVar(value="")
         self.ylim_max_var = tk.StringVar(value="")
-        self.show_grid_var = tk.BooleanVar(value=True)
+        self.show_grid_var = tk.BooleanVar(value=False)
         self.show_zero_lines_var = tk.BooleanVar(value=True)
         self.zero_line_color_var = tk.StringVar(value="grey")
-        self.zero_line_linestyle_var = tk.StringVar(value="-")
+        self.zero_line_linestyle_var = tk.StringVar(value=":")
         self.save_width_var = tk.StringVar(value="6.0")
         self.save_height_var = tk.StringVar(value="6.0")
         self.save_dpi_var = tk.StringVar(value="300")
@@ -34,7 +39,7 @@ class StateManager:
         # --- 詳細スタイル変数 ---
         self.x_format_si_var = tk.StringVar(value="%.1f")  # T (Tesla)
         self.x_format_cgs_var = tk.StringVar(value="%.0f")  # Oe (Oersted)
-        self.y_format_si_var = tk.StringVar(value="%.1f")  # kA/m
+        self.y_format_si_var = tk.StringVar(value="%.0f")  # kA/m
         self.y_format_cgs_var = tk.StringVar(value="%.1f")  # emu/cm^3
         self.y_format_norm_var = tk.StringVar(value="%.2f")  # M/Ms
         self.grid_style_var = tk.StringVar(value=":")

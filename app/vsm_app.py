@@ -11,6 +11,7 @@ from contextlib import redirect_stdout
 import io
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from tkinter import TclError
+import platform
 
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
@@ -24,6 +25,24 @@ import analysis.calculations as vsm_logic
 # -----------------------------------------------------------------------------
 class VSMApp:
     def __init__(self, root):
+        # --- Matplotlibの日本語フォント設定 ---
+        # より確実に日本語フォントを適用するための設定
+        # OSに応じてフォントを自動で設定
+        os_name = platform.system()
+        if os_name == "Windows":
+            # 利用可能なフォントを優先順位順に指定
+            plt.rcParams["font.family"] = ["Meiryo", "Yu Gothic", "MS Gothic"]
+        elif os_name == "Darwin":  # macOS
+            plt.rcParams["font.family"] = "Hiragino Sans"
+        else:  # Linuxなど
+            # IPAフォントなどがインストールされていることを期待
+            # 必要に応じて 'IPAexGothic' などを指定してください
+            plt.rcParams["font.family"] = ["IPAexGothic", "sans-serif"]
+
+        # フォント変更時に数式レンダリングの警告が出るのを防ぐ
+        plt.rcParams["axes.unicode_minus"] = False
+        # ------------------------------------
+
         self.vsm_data = []
         self._update_job = None
         self.all_metadata = {}
@@ -129,6 +148,26 @@ class VSMApp:
         self._add_traces()
         self.graph_manager.update_graph()
 
+    def clear_all_files(self):
+        """全てのファイルをリストから削除する"""
+        if not self.vsm_data:
+            return
+
+        if not messagebox.askyesno("確認", "全てのファイルを削除しますか？"):
+            return
+
+        self.vsm_data.clear()
+        self.file_color_vars.clear()
+        self.all_metadata.clear()
+        self.analysis_results.clear()
+
+        self._update_file_list_ui()
+        self._update_demag_settings_ui()
+        self._update_thickness_settings_ui()
+        self._update_results_table()
+        self.info_button.config(state=tk.DISABLED)
+        self.graph_manager.update_graph()
+
     def _create_menu(self):
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
@@ -208,10 +247,22 @@ class VSMApp:
         file_frame.pack(fill=tk.X, pady=(0, 10))
         ttk.Button(
             file_frame,
-            text="ファイルを選択",
+            text="ファイルを選択 (新規)",
             command=self.event_handlers.load_files,
             padding="10 5",
         ).pack(fill=tk.X)
+        ttk.Button(
+            file_frame,
+            text="ファイルを追加...",
+            command=self.event_handlers.add_files,
+            padding="10 5",
+        ).pack(fill=tk.X, pady=(5, 0))
+        ttk.Button(
+            file_frame,
+            text="ファイルを全て削除",
+            command=self.clear_all_files,
+            padding="10 5",
+        ).pack(fill=tk.X, pady=(5, 0))
         self.info_button = ttk.Button(
             file_frame,
             text="測定情報を表示",
@@ -234,26 +285,19 @@ class VSMApp:
         )
         unit_combo.grid(row=0, column=1, sticky="ew", padx=5, pady=(0, 5))
 
-        ttk.Label(settings_frame, text="基板面積 (cm²):").grid(
-            row=2, column=0, sticky="w"
-        )
-        self.area_entry = ttk.Entry(
-            settings_frame, textvariable=self.state.area_var, width=10
-        )
-        self.area_entry.grid(row=2, column=1, sticky="ew", padx=5, pady=(5, 0))
         self.offset_check = ttk.Checkbutton(
             settings_frame,
             text="磁化オフセット補正",
             variable=self.state.offset_correction_var,
         )
-        self.offset_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        self.offset_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
         self.legend_check = ttk.Checkbutton(
             settings_frame, text="凡例を表示", variable=self.state.show_legend_var
         )
-        self.legend_check.grid(row=4, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        self.legend_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=(5, 0))
 
         thickness_outer_frame = ttk.LabelFrame(
-            parent, text=" 膜厚設定 (nm) ", padding="10"
+            parent, text=" 膜厚・面積設定 ", padding="10"
         )
         thickness_outer_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
@@ -479,7 +523,6 @@ class VSMApp:
 
     def _add_traces(self):
         trace_vars = [
-            self.state.area_var,
             self.state.offset_correction_var,
             self.state.show_legend_var,
             self.state.marker_size_var,
@@ -487,6 +530,10 @@ class VSMApp:
             self.state.axis_label_fontsize_var,
             self.state.tick_label_fontsize_var,
             self.state.legend_fontsize_var,
+            self.state.legend_location_var,
+            self.state.legend_show_frame_var,
+            self.state.legend_alpha_var,
+            self.state.legend_columns_var,
             self.state.xlim_min_var,
             self.state.xlim_max_var,
             self.state.ylim_min_var,
@@ -538,6 +585,14 @@ class VSMApp:
             down_button.pack(side=tk.LEFT, padx=(0, 5))
             if i == len(self.vsm_data) - 1:
                 down_button.config(state=tk.DISABLED)
+
+            # Delete button
+            ttk.Button(
+                row_frame,
+                text="✕",
+                width=3,
+                command=lambda idx=i: self.event_handlers.remove_file(idx),
+            ).pack(side=tk.LEFT, padx=(0, 5))
 
             # File label
             display_name = (filename[:25] + "..") if len(filename) > 27 else filename
@@ -738,8 +793,12 @@ class VSMApp:
         for i, data in enumerate(self.vsm_data):
             if "thickness_var" not in data:
                 data["thickness_var"] = tk.StringVar(value="100.0")
+            
+            if "area_var" not in data:
+                data["area_var"] = tk.StringVar(value="90")  # 初期値 90 mm^2
 
             thickness_var = data["thickness_var"]
+            area_var = data["area_var"]
 
             frame = ttk.Frame(self.thickness_scrollable_frame, padding=(0, 0, 10, 0))
             frame.pack(fill=tk.X, expand=True, pady=2, padx=5)
@@ -753,12 +812,30 @@ class VSMApp:
 
             ttk.Label(frame, text=display_name).grid(row=0, column=0, sticky="w")
 
-            entry = ttk.Entry(frame, textvariable=thickness_var, width=10)
-            entry.grid(row=0, column=1, sticky="e", padx=5)
+            # 膜厚入力
+            ttk.Label(frame, text="膜厚:").grid(row=0, column=1, sticky="e")
+            entry_t = ttk.Entry(frame, textvariable=thickness_var, width=6)
+            entry_t.grid(row=0, column=2, sticky="e", padx=(2, 0))
+            ttk.Label(frame, text="nm").grid(row=0, column=3, sticky="w", padx=(2, 10))
 
-            ttk.Label(frame, text="nm").grid(row=0, column=2, sticky="w")
+            # 面積入力
+            ttk.Label(frame, text="面積:").grid(row=0, column=4, sticky="e")
+            entry_a = ttk.Entry(frame, textvariable=area_var, width=6)
+            entry_a.grid(row=0, column=5, sticky="e", padx=(2, 0))
+            ttk.Label(frame, text="mm²").grid(row=0, column=6, sticky="w", padx=(2, 0))
+
+            ttk.Button(
+                frame,
+                text="✕",
+                width=3,
+                command=lambda idx=i: self.event_handlers.remove_file(idx),
+            ).grid(row=0, column=7, sticky="w", padx=(10, 0))
 
             thickness_var.trace_add(
+                "write",
+                lambda *a, idx=i: self._on_thickness_change(idx),
+            )
+            area_var.trace_add(
                 "write",
                 lambda *a, idx=i: self._on_thickness_change(idx),
             )
@@ -861,12 +938,19 @@ class VSMApp:
         button_frame = ttk.Frame(frame)
         button_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
-        copy_button = ttk.Button(
+        copy_text_button = ttk.Button(
             button_frame,
-            text="クリップボードにコピー",
+            text="テキストとしてコピー",
             command=self._copy_results_to_clipboard,
         )
-        copy_button.pack(side="left", padx=5)
+        copy_text_button.pack(side="left", padx=5)
+
+        copy_html_button = ttk.Button(
+            button_frame,
+            text="表としてコピー (PowerPoint等)",
+            command=self._copy_results_as_html,
+        )
+        copy_html_button.pack(side="left", padx=5)
 
     def _update_results_table(self):
         """Clears and repopulates the results table with the latest analysis data."""
@@ -938,4 +1022,73 @@ class VSMApp:
         except Exception as e:
             messagebox.showerror(
                 "エラー", f"コピー中にエラーが発生しました: {e}", parent=self.root
+            )
+
+    def _copy_results_as_html(self):
+        """Copy the results table to the clipboard as an HTML table."""
+        if not self.analysis_results:
+            return
+
+        try:
+            headers = [
+                "ファイル名",
+                "飽和磁化 Ms (kA/m)",
+                "残留磁化 Mr (kA/m)",
+                "保磁力 Hc (Oe)",
+                "角形比 (S = Mr/Ms)",
+            ]
+
+            # Start HTML table
+            html = '<table border="1" style="border-collapse:collapse; font-family: Arial, sans-serif;">'
+            # Header row
+            html += "<thead><tr style='background-color:#f2f2f2;'>"
+            for header in headers:
+                html += f'<th style="padding:8px; border:1px solid #dddddd; text-align:left;">{header}</th>'
+            html += "</tr></thead>"
+
+            # Data rows
+            html += "<tbody>"
+
+            selected_items = self.results_tree.selection()
+            items_to_copy = []
+
+            if selected_items:
+                # Get selected rows
+                for item_id in selected_items:
+                    items_to_copy.append(self.results_tree.item(item_id, "values"))
+                message_suffix = (
+                    "選択された行を表形式でクリップボードにコピーしました。"
+                )
+            else:
+                # Get all rows if none are selected
+                for child_id in self.results_tree.get_children():
+                    items_to_copy.append(self.results_tree.item(child_id, "values"))
+                message_suffix = (
+                    "すべての解析結果を表形式でクリップボードにコピーしました。"
+                )
+
+            for values in items_to_copy:
+                html += "<tr>"
+                for value in values:
+                    # Align numbers to the right, text to the left
+                    try:
+                        float(value)
+                        align = "right"
+                    except (ValueError, TypeError):
+                        align = "left"
+                    html += f'<td style="padding:8px; border:1px solid #dddddd; text-align:{align};">{value}</td>'
+                html += "</tr>"
+
+            html += "</tbody></table>"
+
+            self.root.clipboard_clear()
+            self.root.clipboard_append(html)
+
+            messagebox.showinfo("成功", message_suffix, parent=self.root)
+
+        except Exception as e:
+            messagebox.showerror(
+                "エラー",
+                f"HTML形式でのコピー中にエラーが発生しました: {e}",
+                parent=self.root,
             )
