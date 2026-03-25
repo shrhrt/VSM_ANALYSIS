@@ -13,6 +13,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from tkinter import TclError
 import platform
 from typing import List, Dict, Any, Optional
+from tkinterdnd2 import DND_FILES
+import sv_ttk
 
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
@@ -31,7 +33,7 @@ class VSMApp:
     UIの構築、各タブの管理、および全体データの保持を行います。
     """
 
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: Any) -> None:
         """
         VSMAppのインスタンスを初期化し、GUIを構築します。
 
@@ -78,11 +80,9 @@ class VSMApp:
         self.root.geometry("1200x850")
 
         self.style = ttk.Style(self.root)
-        self.style.theme_use("clam")
-        self._configure_styles()
-        self.root.configure(bg=self.style.lookup(".", "background"))
-
-        self._create_menu()
+        # モダンテーマ「sv_ttk」を適用（デフォルトはライトテーマ）
+        sv_ttk.set_theme("light")
+        self.root.configure(bg=self.get_bg_color())
 
         # --- メインレイアウト (PanedWindowベース) ---
         main_frame = ttk.Frame(root, padding="10")
@@ -117,7 +117,7 @@ class VSMApp:
 
         # --- Log Text Widget ---
         self.log_text = scrolledtext.ScrolledText(
-            log_tab, wrap=tk.WORD, font=("Consolas", 9), bg="white", fg="black"
+            log_tab, wrap=tk.WORD, font=("Consolas", 9)
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
@@ -132,6 +132,9 @@ class VSMApp:
         self.graph_manager = graph_manager.GraphManager(self)
         self.event_handlers = event_handlers.EventHandlers(self)
 
+        # メニューの作成（イベントハンドラー初期化後に呼び出す）
+        self._create_menu()
+
         # --- Create controls and results tab structure ---
         self._create_analysis_controls(tab_analysis)
         self._create_style_controls(tab_style)
@@ -143,16 +146,16 @@ class VSMApp:
         self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
         toolbar = NavigationToolbar2Tk(self.canvas, graph_frame, pack_toolbar=False)
-        toolbar.config(background=self.style.lookup(".", "background"))
+        toolbar.config(background=self.get_bg_color())
         toolbar._message_label.config(
-            background=self.style.lookup(".", "background"), foreground="black"
+            background=self.get_bg_color(), foreground="black"
         )
         for button in toolbar.winfo_children():
             if isinstance(button, (tk.Button, tk.Checkbutton)):
                 button.config(
-                    background=self.style.lookup(".", "background"),
+                    background=self.get_bg_color(),
                     foreground="black",
-                    highlightbackground=self.style.lookup(".", "background"),
+                    highlightbackground=self.get_bg_color(),
                 )
         toolbar.update()
         toolbar.grid(row=0, column=0, sticky="ew", padx=5)
@@ -160,6 +163,17 @@ class VSMApp:
 
         self._add_traces()
         self.graph_manager.update_graph()
+
+        # --- ドラッグ＆ドロップの設定 ---
+        self.root.drop_target_register(DND_FILES)
+        self.root.dnd_bind("<<Drop>>", self.event_handlers.on_drop_files)
+
+    def get_bg_color(self) -> str:
+        """現在のテーマに応じた背景色を取得します。"""
+        color = self.style.lookup("TFrame", "background")
+        if not color:
+            color = "#1c1c1c" if sv_ttk.get_theme() == "dark" else "#fafafa"
+        return color
 
     def clear_all_files(self) -> None:
         """全てのファイルをリストから削除し、UIを初期化します。"""
@@ -205,6 +219,20 @@ class VSMApp:
             command=lambda: self.event_handlers.convert_dat_file(),
         )
 
+        view_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="表示", menu=view_menu)
+        view_menu.add_command(
+            label="ライト / ダーク 切り替え",
+            command=sv_ttk.toggle_theme,
+        )
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="ヘルプ", menu=help_menu)
+        help_menu.add_command(
+            label="計算ロジックの解説",
+            command=self.event_handlers.show_calculation_logic_window,
+        )
+
     def _on_tab_changed(self, event: tk.Event) -> None:
         """
         タブが切り替わったときのイベントハンドラ。
@@ -227,48 +255,6 @@ class VSMApp:
             # This can happen if the tab is in the process of being destroyed
             pass
 
-    def _configure_styles(self) -> None:
-        """ttkのスタイル（色、フォントなど）を全体に設定します。"""
-        bg, fg, entry_bg = "SystemButtonFace", "black", "white"
-        border, accent = "#CCCCCC", "#007ACC"
-        self.style.configure(".", background=bg, foreground=fg, font=("Arial", 10))
-        self.style.configure("TLabel", background=bg, foreground=fg)
-        self.style.configure("TFrame", background=bg)
-        self.style.configure("TNotebook", background=bg, borderwidth=0)
-        self.style.configure(
-            "TNotebook.Tab",
-            background=bg,
-            foreground="#666666",
-            padding=[10, 5],
-            font=("Arial", 10, "bold"),
-        )
-        self.style.map(
-            "TNotebook.Tab",
-            background=[("selected", accent)],
-            foreground=[("selected", "white")],
-        )
-        self.style.configure(
-            "TEntry", fieldbackground=entry_bg, foreground=fg, insertcolor=fg
-        )
-        self.style.configure(
-            "TLabelframe", background=bg, bordercolor=border, foreground=fg
-        )
-        self.style.configure(
-            "TLabelframe.Label",
-            background=bg,
-            foreground=accent,
-            font=("Arial", 11, "bold"),
-        )
-        self.style.configure(
-            "TButton",
-            background=accent,
-            foreground="white",
-            font=("Arial", 11, "bold"),
-            borderwidth=0,
-        )
-        self.style.map("TButton", background=[("active", "#005F9E")])
-        self.style.configure("TCheckbutton", background=bg, foreground=fg)
-
     def _create_analysis_controls(self, parent: ttk.Frame) -> None:
         """
         解析タブ内のコントロール（ファイル操作、解析設定など）を作成します。
@@ -283,6 +269,7 @@ class VSMApp:
             text="ファイルを選択 (新規)",
             command=self.event_handlers.load_files,
             padding="10 5",
+            style="Accent.TButton",
         ).pack(fill=tk.X)
         ttk.Button(
             file_frame,
@@ -337,7 +324,7 @@ class VSMApp:
         thickness_canvas = tk.Canvas(
             thickness_outer_frame,
             borderwidth=0,
-            background=self.style.lookup(".", "background"),
+            background=self.get_bg_color(),
             highlightthickness=0,
             height=100,
         )
@@ -368,7 +355,7 @@ class VSMApp:
         demag_canvas = tk.Canvas(
             demag_outer_frame,
             borderwidth=0,
-            background=self.style.lookup(".", "background"),
+            background=self.get_bg_color(),
             highlightthickness=0,
             height=200,
         )
@@ -564,6 +551,7 @@ class VSMApp:
             text="画像を保存 (Save Image)",
             command=self.event_handlers.save_figure,
             padding="10",
+            style="Accent.TButton",
         ).pack(fill=tk.X, expand=True, side=tk.BOTTOM)
 
     def _add_traces(self) -> None:
