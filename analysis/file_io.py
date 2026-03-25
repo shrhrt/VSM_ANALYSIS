@@ -1,11 +1,20 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 from pathlib import Path
+from typing import Dict, Tuple, Optional, Union
 
-def find_header_row(file_path, default_row=40):
+
+def find_header_row(file_path: Union[str, Path], default_row: int = 40) -> int:
     """
-    ファイル内のデータヘッダー行を自動的に検出する。
-    'H(Oe)'と'M(emu)'を含む行を探し、その行番号（0-indexed）を返す。
+    ファイル内のデータヘッダー行を自動的に検出します。
+    'H(Oe)'と'M(emu)'を含む行を探し、その行番号（0-indexed）を返します。
+
+    Args:
+        file_path (Union[str, Path]): 対象ファイルのパス。
+        default_row (int, optional): 見つからなかった場合に使用するデフォルト行番号。デフォルトは40。
+
+    Returns:
+        int: 検出されたヘッダー行のインデックス。
     """
     encodings_to_try = ["shift-jis", "utf-8"]
     for encoding in encodings_to_try:
@@ -26,9 +35,15 @@ def find_header_row(file_path, default_row=40):
     return default_row
 
 
-def parse_metadata(file_path):
+def parse_metadata(file_path: Union[str, Path]) -> Dict[str, str]:
     """
-    ファイルのヘッダーから測定メタデータを抽出し、辞書として返す。
+    ファイルのヘッダーから測定メタデータを抽出し、辞書として返します。
+
+    Args:
+        file_path (Union[str, Path]): 対象ファイルのパス。
+
+    Returns:
+        Dict[str, str]: 抽出されたメタデータの辞書。
     """
     metadata = {}
     try:
@@ -61,10 +76,20 @@ def parse_metadata(file_path):
         print(f"  警告: メタデータ読み取り中に予期せぬエラー発生: {e}。")
     return metadata
 
-def load_vsm_file(file_path):
+
+def load_vsm_file(
+    file_path: Union[str, Path],
+) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """
-    一つのVSMファイルを読み込み、DataFrameを返す。
-    エラーが発生した場合は、(None, error_message)を返す。
+    一つのVSMファイルを読み込み、DataFrameを返します。
+    エラーが発生した場合は、(None, error_message)を返します。
+
+    Args:
+        file_path (Union[str, Path]): 読み込むVSMファイルのパス。
+
+    Returns:
+        Tuple[Optional[pd.DataFrame], Optional[str]]:
+            (成功時のDataFrame, エラー発生時のエラーメッセージ文字列)。
     """
     path = Path(file_path)
     header_row = find_header_row(path)
@@ -73,12 +98,15 @@ def load_vsm_file(file_path):
             df = pd.read_csv(path, header=header_row, encoding="shift-jis")
         except UnicodeDecodeError:
             df = pd.read_csv(path, header=header_row, encoding="utf-8")
-        
+
         df.dropna(inplace=True)
-        
+
         if not {"H(Oe)", "M(emu)"}.issubset(df.columns):
-            return None, f"ファイル '{path.name}' に必要な列 ('H(Oe)', 'M(emu)') がありません。"
-            
-        return df, None # Success
+            return (
+                None,
+                f"ファイル '{path.name}' に必要な列 ('H(Oe)', 'M(emu)') がありません。",
+            )
+
+        return df, None  # Success
     except Exception as e:
         return None, f"'{path.name}'の読み込みに失敗しました:\n{e}"

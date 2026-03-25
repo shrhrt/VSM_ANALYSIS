@@ -6,6 +6,7 @@ from tkinter import TclError, filedialog, messagebox, scrolledtext, ttk, colorch
 from typing import TYPE_CHECKING, Any
 
 import analysis.file_io as file_io
+import tools.dat_to_VSM as dat_converter
 
 if TYPE_CHECKING:
     from app.vsm_app import VSMApp
@@ -24,6 +25,41 @@ class EventHandlers:
             app (VSMApp): メインアプリケーションのインスタンス。
         """
         self.app: "VSMApp" = app
+
+    def convert_dat_file(self) -> None:
+        """PPMSの.datファイルを.VSM形式に変換するダイアログを開きます。"""
+        dat_path = filedialog.askopenfilename(
+            title="変換する PPMS .dat ファイルを選択",
+            filetypes=(("DAT files", "*.dat"), ("All files", "*.*")),
+            parent=self.app.root,
+        )
+        if not dat_path:
+            return
+
+        # 拡張子を .vsm に変更したデフォルトファイル名を生成
+        default_vsm_name = Path(dat_path).with_suffix(".vsm").name
+
+        vsm_path = filedialog.asksaveasfilename(
+            title="VSMファイルの保存先",
+            initialfile=default_vsm_name,
+            defaultextension=".vsm",
+            filetypes=(("VSM files", "*.vsm"), ("All files", "*.*")),
+            parent=self.app.root,
+        )
+        if not vsm_path:
+            return
+
+        try:
+            dat_converter.convert_dat_to_vsm(dat_path, vsm_path)
+            messagebox.showinfo(
+                "成功",
+                f"変換が完了しました。\n\n保存先: {vsm_path}",
+                parent=self.app.root,
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "エラー", f"変換中にエラーが発生しました:\n{e}", parent=self.app.root
+            )
 
     def show_metadata_window(self) -> None:
         """読み込まれたファイルの測定情報（メタデータ）を表示するウィンドウを開きます。"""

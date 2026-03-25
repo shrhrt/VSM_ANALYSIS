@@ -12,6 +12,7 @@ import io
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from tkinter import TclError
 import platform
+from typing import List, Dict, Any, Optional
 
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
@@ -24,7 +25,19 @@ import analysis.calculations as vsm_logic
 # GUIアプリケーションのクラス
 # -----------------------------------------------------------------------------
 class VSMApp:
-    def __init__(self, root):
+    """
+    VSMデータ解析アプリケーションのメインGUIクラス。
+
+    UIの構築、各タブの管理、および全体データの保持を行います。
+    """
+
+    def __init__(self, root: tk.Tk) -> None:
+        """
+        VSMAppのインスタンスを初期化し、GUIを構築します。
+
+        Args:
+            root (tk.Tk): Tkinterのメインウィンドウインスタンス。
+        """
         # --- Matplotlibの日本語フォント設定 ---
         # より確実に日本語フォントを適用するための設定
         # OSに応じてフォントを自動で設定
@@ -43,13 +56,13 @@ class VSMApp:
         plt.rcParams["axes.unicode_minus"] = False
         # ------------------------------------
 
-        self.vsm_data = []
-        self._update_job = None
-        self.all_metadata = {}
-        self.analysis_results = []
-        self.file_color_vars = []
-        self.state = state_manager.StateManager()
-        self.base_colors = [  # 1本目を赤、2本目を青、3本目を黄緑に設定
+        self.vsm_data: List[Dict[str, Any]] = []
+        self._update_job: Optional[str] = None
+        self.all_metadata: Dict[str, Dict[str, str]] = {}
+        self.analysis_results: List[Dict[str, Any]] = []
+        self.file_color_vars: List[tk.StringVar] = []
+        self.state: state_manager.StateManager = state_manager.StateManager()
+        self.base_colors: List[str] = [  # 1本目を赤、2本目を青、3本目を黄緑に設定
             "red",
             "blue",
             "limegreen",
@@ -60,7 +73,7 @@ class VSMApp:
             "brown",  # 8本目
         ]
 
-        self.root = root
+        self.root: tk.Tk = root
         self.root.title("VSM Data Analyzer")
         self.root.geometry("1200x850")
 
@@ -148,8 +161,8 @@ class VSMApp:
         self._add_traces()
         self.graph_manager.update_graph()
 
-    def clear_all_files(self):
-        """全てのファイルをリストから削除する"""
+    def clear_all_files(self) -> None:
+        """全てのファイルをリストから削除し、UIを初期化します。"""
         if not self.vsm_data:
             return
 
@@ -168,7 +181,8 @@ class VSMApp:
         self.info_button.config(state=tk.DISABLED)
         self.graph_manager.update_graph()
 
-    def _create_menu(self):
+    def _create_menu(self) -> None:
+        """メニューバーを作成してメインウィンドウに配置します。"""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
@@ -184,8 +198,20 @@ class VSMApp:
             command=lambda: self.event_handlers.save_session(),
         )
 
-    def _on_tab_changed(self, event):
-        """Event handler for when the notebook tab is changed."""
+        tool_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="ツール", menu=tool_menu)
+        tool_menu.add_command(
+            label="PPMS (.dat) を VSM形式に変換...",
+            command=lambda: self.event_handlers.convert_dat_file(),
+        )
+
+    def _on_tab_changed(self, event: tk.Event) -> None:
+        """
+        タブが切り替わったときのイベントハンドラ。
+
+        Args:
+            event (tk.Event): 発生したイベント情報。
+        """
         selected_tab_id = event.widget.select()
         # Ensure we have a valid tab selected
         if not selected_tab_id:
@@ -201,7 +227,8 @@ class VSMApp:
             # This can happen if the tab is in the process of being destroyed
             pass
 
-    def _configure_styles(self):
+    def _configure_styles(self) -> None:
+        """ttkのスタイル（色、フォントなど）を全体に設定します。"""
         bg, fg, entry_bg = "SystemButtonFace", "black", "white"
         border, accent = "#CCCCCC", "#007ACC"
         self.style.configure(".", background=bg, foreground=fg, font=("Arial", 10))
@@ -242,7 +269,13 @@ class VSMApp:
         self.style.map("TButton", background=[("active", "#005F9E")])
         self.style.configure("TCheckbutton", background=bg, foreground=fg)
 
-    def _create_analysis_controls(self, parent):
+    def _create_analysis_controls(self, parent: ttk.Frame) -> None:
+        """
+        解析タブ内のコントロール（ファイル操作、解析設定など）を作成します。
+
+        Args:
+            parent (ttk.Frame): コントロールを配置する親フレーム。
+        """
         file_frame = ttk.LabelFrame(parent, text=" ファイル ", padding="10")
         file_frame.pack(fill=tk.X, pady=(0, 10))
         ttk.Button(
@@ -375,7 +408,13 @@ class VSMApp:
         )
         self.ms_settings_button.pack(fill=tk.X, pady=5)
 
-    def _create_style_controls(self, parent):
+    def _create_style_controls(self, parent: ttk.Frame) -> None:
+        """
+        グラフ設定タブ内のコントロール（軸、プロット、描画範囲など）を作成します。
+
+        Args:
+            parent (ttk.Frame): コントロールを配置する親フレーム。
+        """
         parent.grid_columnconfigure(1, weight=1)
         axis_grid_frame = ttk.LabelFrame(parent, text=" 軸とグリッド ", padding="10")
         axis_grid_frame.pack(fill=tk.X, pady=(0, 10))
@@ -485,7 +524,13 @@ class VSMApp:
             row=1, column=3, sticky="ew", pady=(5, 0)
         )
 
-    def _create_export_controls(self, parent):
+    def _create_export_controls(self, parent: ttk.Frame) -> None:
+        """
+        保存タブ内のコントロール（画像サイズ、DPI、保存ボタンなど）を作成します。
+
+        Args:
+            parent (ttk.Frame): コントロールを配置する親フレーム。
+        """
         save_settings_frame = ttk.LabelFrame(
             parent, text=" 画像サイズ設定 ", padding="10"
         )
@@ -521,7 +566,8 @@ class VSMApp:
             padding="10",
         ).pack(fill=tk.X, expand=True, side=tk.BOTTOM)
 
-    def _add_traces(self):
+    def _add_traces(self) -> None:
+        """状態変数(StateManagerの変数)の変更を監視し、変更時にグラフ更新をスケジュールします。"""
         trace_vars = [
             self.state.offset_correction_var,
             self.state.show_legend_var,
@@ -552,7 +598,8 @@ class VSMApp:
         for var in trace_vars:
             var.trace_add("write", self._schedule_update)
 
-    def _update_file_list_ui(self):
+    def _update_file_list_ui(self) -> None:
+        """ファイルリストのUI（描画順の変更、色の選択、削除）を再構築します。"""
         # Clear existing widgets
         for widget in self.individual_color_frame.winfo_children():
             widget.destroy()
@@ -617,17 +664,25 @@ class VSMApp:
                 command=lambda idx=i: self.event_handlers.choose_individual_color(idx),
             ).pack(side=tk.RIGHT)
 
-    def _schedule_update(self, *args):
+    def _schedule_update(self, *args: Any) -> None:
+        """グラフの更新処理を少し遅延させてスケジュールします。連続した変更による負荷を軽減します。"""
         if self._update_job:
             self.root.after_cancel(self._update_job)
         self._update_job = self.root.after(250, self.graph_manager.update_graph)
 
-    def log_message(self, message):
+    def log_message(self, message: str) -> None:
+        """
+        ログタブのテキストエリアにメッセージを追記します。
+
+        Args:
+            message (str): 追記するメッセージ文字列。
+        """
         self.log_text.insert(tk.END, message)
         self.log_text.see(tk.END)
         self.root.update_idletasks()
 
-    def _update_demag_settings_ui(self):
+    def _update_demag_settings_ui(self) -> None:
+        """反磁性補正の設定UI（各ファイルごと）を再構築します。"""
         # Clear existing widgets
         for widget in self.demag_scrollable_frame.winfo_children():
             widget.destroy()
@@ -779,7 +834,8 @@ class VSMApp:
             state=tk.NORMAL if num_files > 0 else tk.DISABLED
         )
 
-    def _update_thickness_settings_ui(self):
+    def _update_thickness_settings_ui(self) -> None:
+        """膜厚・面積設定のUI（各ファイルごと）を再構築します。"""
         # Clear existing widgets
         for widget in self.thickness_scrollable_frame.winfo_children():
             widget.destroy()
@@ -793,7 +849,7 @@ class VSMApp:
         for i, data in enumerate(self.vsm_data):
             if "thickness_var" not in data:
                 data["thickness_var"] = tk.StringVar(value="100.0")
-            
+
             if "area_var" not in data:
                 data["area_var"] = tk.StringVar(value="90")  # 初期値 90 mm^2
 
@@ -840,13 +896,26 @@ class VSMApp:
                 lambda *a, idx=i: self._on_thickness_change(idx),
             )
 
-    def _on_thickness_change(self, file_index):
+    def _on_thickness_change(self, file_index: int) -> None:
+        """
+        膜厚または面積が変更されたときの処理。グラフの更新をスケジュールします。
+
+        Args:
+            file_index (int): 変更されたデータのインデックス。
+        """
         if file_index >= len(self.vsm_data):
             return
         # This just triggers a graph update. The value is already in the StringVar.
         self._schedule_update()
 
-    def _on_demag_setting_change(self, file_index, var_changed):
+    def _on_demag_setting_change(self, file_index: int, var_changed: Any) -> None:
+        """
+        反磁性補正の設定が変更されたときの処理。設定を保存しグラフを更新します。
+
+        Args:
+            file_index (int): 変更されたデータのインデックス。
+            var_changed (Any): 変更をトリガーしたTkinter変数。
+        """
         if file_index >= len(self.vsm_data):
             return
 
@@ -896,8 +965,8 @@ class VSMApp:
             # We just won't trigger an update in that case.
             pass
 
-    def _create_results_tab(self):
-        """Creates the structure of the results table tab."""
+    def _create_results_tab(self) -> None:
+        """解析結果を表示するテーブル（Treeview）の構造を作成します。"""
         frame = ttk.Frame(self.results_tab, padding="10")
         frame.pack(expand=True, fill="both")
 
@@ -952,8 +1021,8 @@ class VSMApp:
         )
         copy_html_button.pack(side="left", padx=5)
 
-    def _update_results_table(self):
-        """Clears and repopulates the results table with the latest analysis data."""
+    def _update_results_table(self) -> None:
+        """解析結果テーブルを最新のデータでクリアおよび再描画します。"""
         # Clear existing data
         for i in self.results_tree.get_children():
             self.results_tree.delete(i)
@@ -973,7 +1042,8 @@ class VSMApp:
                 "", "end", values=(res["filename"], ms_str, mr_str, hc_str, sq_str)
             )
 
-    def _copy_results_to_clipboard(self):
+    def _copy_results_to_clipboard(self) -> None:
+        """解析結果テーブルのデータをTSV形式でクリップボードにコピーします。"""
         if not self.analysis_results:
             return
 
@@ -1024,8 +1094,8 @@ class VSMApp:
                 "エラー", f"コピー中にエラーが発生しました: {e}", parent=self.root
             )
 
-    def _copy_results_as_html(self):
-        """Copy the results table to the clipboard as an HTML table."""
+    def _copy_results_as_html(self) -> None:
+        """解析結果テーブルのデータをHTMLの表形式でクリップボードにコピーします。"""
         if not self.analysis_results:
             return
 
