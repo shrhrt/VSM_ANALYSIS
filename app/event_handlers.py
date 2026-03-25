@@ -71,7 +71,7 @@ class EventHandlers:
         info_window = tk.Toplevel(self.app.root)
         info_window.title("測定情報")
         info_window.geometry("500x650")
-        info_window.configure(bg=self.app.style.lookup(".", "background"))
+        info_window.configure(bg=self.app.get_bg_color())
         top_frame = ttk.Frame(info_window, padding="10 10 10 0")
         top_frame.pack(fill=tk.X)
         ttk.Label(top_frame, text="ファイルを選択:").pack(side=tk.LEFT, padx=(0, 10))
@@ -113,70 +113,137 @@ class EventHandlers:
         file_menu.bind("<<ComboboxSelected>>", update_display)
         update_display()
 
-    def load_files(self) -> None:
-        """
-        ファイル選択ダイアログを開き、選択された新しいVSMファイルを読み込みます。
-        既存のデータはクリアされます。
-        """
-        files = filedialog.askopenfilenames(
-            title="解析したいVSMファイルを選択",
-            filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
-            parent=self.app.root,
+    def show_calculation_logic_window(self) -> None:
+        """解析ロジック（計算方法）の解説ウィンドウを表示します。"""
+        win = tk.Toplevel(self.app.root)
+        win.title("計算ロジックの解説")
+        win.geometry("800x600")
+        win.configure(bg=self.app.get_bg_color())
+        win.transient(self.app.root)
+
+        # --- トピックと説明文を定義 ---
+        topics = {
+            "単位換算と体積磁化": """PPMSから出力される生データである磁場 H (Oe) と磁気モーメント M (emu) は、サンプルの寸法を用いて体積磁化に変換される。
+
+■ 体積の計算
+体積 (cm³) = 面積 (mm²) × 膜厚 (nm) × 10⁻⁹
+
+■ 磁場のSI単位系への換算
+H (T) = H (Oe) × 10⁻⁴
+
+■ 磁化の換算
+M (kA/m) = M (emu) / 体積 (cm³)
+※ 1 emu/cm³ = 1 kA/m である。""",
+            "反磁性補正": """強磁性体のヒステリシスループに乗っている、サンプルホルダーや基板に由来する線形な反磁性または常磁性成分を取り除くための補正である。
+
+■ 自動モード
+M-Hカーブの正負両端の領域（デフォルトでは全データ点の外側15%）に対し、最小二乗法による線形フィッティングを行い、その傾き χ を算出する。
+
+■ 手動モード
+ユーザーが指定した正負の磁場範囲内のデータ点に対し、同様に線形フィッティングを行い、傾き χ を算出する。
+
+■ 補正計算
+補正後の磁化 M_corrected は、元の磁化 M_raw から線形成分を差し引くことで得られる。
+M_corrected = M_raw - χ × H""",
+            "磁化オフセット補正": """測定機器のドリフト等に起因する、M軸方向の全体的なズレを補正し、ヒステリシスループが原点に対して対称になるように調整する。
+
+■ オフセット値の計算
+高磁場領域における磁化の平均値を計算する。
+・M_pos: 最大磁場の90%以上の領域におけるMの平均値
+・M_neg: 最小磁場の90%以下の領域におけるMの平均値
+オフセット値 = (M_pos + M_neg) / 2
+
+■ 補正計算
+最終的な磁化 M_final は、反磁性補正後の磁化 M_corrected からオフセット値を差し引くことで得られる。
+M_final = M_corrected - オフセット値""",
+            "磁気特性の算出 (Ms, Mr, Hc)": """各種補正が完了した最終的な磁化 M_final を用いて、主要な磁気特性パラメータを算出する。
+
+■ 飽和磁化 (Ms)
+高磁場領域（デフォルトでは最大磁場の90%以上、手動指定も可）における正負両側の磁化の平均値を計算し、その絶対値の平均を Ms とする。
+
+■ 残留磁化 (Mr)
+ヒステリシスループの往路（Hが減少）と復路（Hが増加）のデータを分割する。
+その後、`numpy.interp` を用いた線形補間により、磁場 H = 0 を横切る際の磁化 M の値をそれぞれ求め、それらの絶対値の平均を Mr とする。
+
+■ 保磁力 (Hc)
+同様に、線形補間を用いて磁化 M = 0 を横切る際の磁場 H の値をそれぞれ求め、それらの絶対値の平均を Hc とする。
+
+■ 角形比 (S)
+S = Mr / Ms""",
+        }
+
+        # --- メインレイアウト ---
+        main_paned_window = ttk.PanedWindow(win, orient=tk.HORIZONTAL)
+        main_paned_window.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # --- 左ペイン (トピックリスト) ---
+        left_frame = ttk.Frame(main_paned_window, padding=0)
+        main_paned_window.add(left_frame, weight=1)
+        listbox = tk.Listbox(
+            left_frame, font=("Arial", 11), selectmode=tk.SINGLE, exportselection=False
         )
+        for topic in topics:
+            listbox.insert(tk.END, topic)
+        listbox.pack(fill=tk.BOTH, expand=True)
+
+        # --- 右ペイン (テキスト表示) ---
+        right_frame = ttk.Frame(main_paned_window, padding=0)
+        main_paned_window.add(right_frame, weight=3)
+        text_widget = scrolledtext.ScrolledText(
+            right_frame, wrap=tk.WORD, font=("Arial", 11), padx=15, pady=15
+        )
+        text_widget.pack(fill=tk.BOTH, expand=True)
+
+        # --- イベント処理 ---
+        def update_text(event=None):
+            selected_indices = listbox.curselection()
+            if not selected_indices:
+                return
+            selected_topic = listbox.get(selected_indices[0])
+            content = topics.get(selected_topic, "トピックが見つかりません。")
+            text_widget.config(state=tk.NORMAL)
+            text_widget.delete(1.0, tk.END)
+            text_widget.insert(tk.END, content)
+            text_widget.config(state=tk.DISABLED)
+
+        listbox.bind("<<ListboxSelect>>", update_text)
+
+        # --- 初期状態 ---
+        listbox.selection_set(0)
+        update_text()
+
+        close_btn = ttk.Button(
+            win, text="閉じる", command=win.destroy, style="Accent.TButton"
+        )
+        close_btn.pack(pady=(0, 10))
+
+    def on_drop_files(self, event: Any) -> None:
+        """
+        ドラッグ＆ドロップされたファイルを読み込み、既存のデータに追加します。
+
+        Args:
+            event (Any): ドロップイベントオブジェクト。
+        """
+        # Tkinterの機能を使って、スペースを含むファイルパスを安全にリスト化
+        files = self.app.root.tk.splitlist(event.data)
         if not files:
             return
+        self._process_loaded_files(files, append=True)
 
-        self.app.vsm_data, self.app.file_color_vars = [], []
-        for i, file_path in enumerate(files):
-            df, error_message = file_io.load_vsm_file(file_path)
+    def _process_loaded_files(self, files: tuple, append: bool = False) -> None:
+        """
+        ファイルパスのリストを処理し、アプリケーションのデータモデルに読み込みます。
 
-            if error_message:
-                messagebox.showerror("読込エラー", error_message, parent=self.app.root)
-                if "必要な列" in error_message:
-                    messagebox.showwarning(
-                        "形式エラー", error_message, parent=self.app.root
-                    )
-                else:
-                    messagebox.showerror(
-                        "読込エラー", error_message, parent=self.app.root
-                    )
-                continue
-
-            path = Path(file_path)
-            file_data = {
-                "path": path,
-                "df": df,
-                "thickness_var": tk.StringVar(value="30.0"),
-                "marker_style_var": tk.StringVar(value="o"),  # 'o' for circle
-                "legend_name_var": tk.StringVar(value=path.stem),
-            }
-            self.app.vsm_data.append(file_data)
-
-            color_var = tk.StringVar(
-                value=self.app.base_colors[i % len(self.app.base_colors)]
-            )
-            self.app.file_color_vars.append(color_var)
-
-        self.app.info_button.config(
-            state=tk.NORMAL if self.app.vsm_data else tk.DISABLED
-        )
-        self.app._update_file_list_ui()
-        self.app._update_demag_settings_ui()
-        self.app._update_thickness_settings_ui()
-        self.app.graph_manager.update_graph()
-
-    def add_files(self) -> None:
-        """既存のデータを保持したまま、追加でVSMファイルを読み込みます。"""
-        files = filedialog.askopenfilenames(
-            title="追加するVSMファイルを選択",
-            filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
-            parent=self.app.root,
-        )
-        if not files:
-            return
-
-        # 色の割り当て用インデックス（既存のファイル数からスタート）
-        start_idx = len(self.app.vsm_data)
+        Args:
+            files (tuple): 読み込むファイルのパスのタプル。
+            append (bool): 既存のデータに追加するかどうか。Falseの場合は既存のデータをクリアします。
+        """
+        if not append:
+            self.app.vsm_data.clear()
+            self.app.file_color_vars.clear()
+            start_idx = 0
+        else:
+            start_idx = len(self.app.vsm_data)
 
         for i, file_path in enumerate(files):
             df, error_message = file_io.load_vsm_file(file_path)
@@ -207,6 +274,26 @@ class EventHandlers:
         self.app._update_demag_settings_ui()
         self.app._update_thickness_settings_ui()
         self.app.graph_manager.update_graph()
+
+    def load_files(self) -> None:
+        """ファイル選択ダイアログを開き、新しいVSMファイルを読み込みます（既存データはクリア）。"""
+        files = filedialog.askopenfilenames(
+            title="解析したいVSMファイルを選択",
+            filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
+            parent=self.app.root,
+        )
+        if files:
+            self._process_loaded_files(files, append=False)
+
+    def add_files(self) -> None:
+        """既存のデータを保持したまま、追加でVSMファイルを読み込みます。"""
+        files = filedialog.askopenfilenames(
+            title="追加するVSMファイルを選択",
+            filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
+            parent=self.app.root,
+        )
+        if files:
+            self._process_loaded_files(files, append=True)
 
     def remove_file(self, index: int) -> None:
         """
@@ -316,7 +403,7 @@ class EventHandlers:
         canvas = tk.Canvas(
             legend_frame,
             borderwidth=0,
-            background=self.app.style.lookup(".", "background"),
+            background=self.app.get_bg_color(),
             highlightthickness=0,
         )
         scrollbar = ttk.Scrollbar(legend_frame, orient="vertical", command=canvas.yview)
@@ -512,7 +599,9 @@ class EventHandlers:
             self.app.graph_manager.update_graph()
             win.destroy()
 
-        ok_button = ttk.Button(button_frame, text="OK", command=on_ok)
+        ok_button = ttk.Button(
+            button_frame, text="OK", command=on_ok, style="Accent.TButton"
+        )
         ok_button.pack()
 
     def show_ms_settings_window(self) -> None:
@@ -529,7 +618,7 @@ class EventHandlers:
         canvas = tk.Canvas(
             main_frame,
             borderwidth=0,
-            background=self.app.style.lookup(".", "background"),
+            background=self.app.get_bg_color(),
             highlightthickness=0,
         )
         scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
@@ -684,9 +773,12 @@ class EventHandlers:
         ttk.Button(
             button_frame, text="キャンセル", command=settings_window.destroy
         ).grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ttk.Button(button_frame, text="OK & 保存", command=save_settings).grid(
-            row=0, column=1, sticky="ew", padx=(5, 0)
-        )
+        ttk.Button(
+            button_frame,
+            text="OK & 保存",
+            command=save_settings,
+            style="Accent.TButton",
+        ).grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
     def move_file_up(self, index: int) -> None:
         """
