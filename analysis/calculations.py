@@ -4,16 +4,11 @@ import pandas as pd
 from scipy.stats import linregress
 from matplotlib.ticker import AutoMinorLocator
 import matplotlib.pyplot as plt
+from typing import Any, Tuple, Optional, Dict
 
 # -----------------------------------------------------------------------------
 # 解析・処理関数
 # -----------------------------------------------------------------------------
-
-
-
-
-
-
 
 
 def find_demag_slope_auto(H_data, M_data, segment_ratio=0.15, min_r_squared=0.99):
@@ -51,8 +46,24 @@ def find_demag_slope_auto(H_data, M_data, segment_ratio=0.15, min_r_squared=0.99
     return (slope_pos + slope_neg) / 2, r2_pos, r2_neg
 
 
-def find_demag_slope_manual(H_data, M_data, pos_range, neg_range):
-    """指定磁場範囲で線形フィッティングを行い、傾きを計算"""
+def find_demag_slope_manual(
+    H_data: Any,
+    M_data: Any,
+    pos_range: Tuple[float, float],
+    neg_range: Tuple[float, float],
+) -> Tuple[float, float, float]:
+    """
+    指定された磁場範囲で線形フィッティングを行い、反磁性補正の傾きを計算します。
+
+    Args:
+        H_data (Any): 磁場(H)のデータ配列。
+        M_data (Any): 磁化(M)のデータ配列。
+        pos_range (Tuple[float, float]): 正磁場側のフィッティング範囲 (min, max)。
+        neg_range (Tuple[float, float]): 負磁場側のフィッティング範囲 (min, max)。
+
+    Returns:
+        Tuple[float, float, float]: (計算された平均の傾き, 正磁場側のR^2, 負磁場側のR^2)。
+    """
     df = pd.DataFrame({"H": H_data, "M": M_data})
     slope_pos, r2_pos = 0, 0
     try:
@@ -100,8 +111,21 @@ def find_demag_slope_manual(H_data, M_data, pos_range, neg_range):
         return 0, 0, 0
 
 
-def calculate_remanence(H_down, M_down, H_up, M_up):
-    """残留磁化(Mr)を往路・復路データから計算"""
+def calculate_remanence(
+    H_down: Any, M_down: Any, H_up: Any, M_up: Any
+) -> Optional[float]:
+    """
+    残留磁化(Mr)を往路・復路データから計算します (H=0のときのM)。
+
+    Args:
+        H_down (Any): 往路の磁場データ。
+        M_down (Any): 往路の磁化データ。
+        H_up (Any): 復路の磁場データ。
+        M_up (Any): 復路の磁化データ。
+
+    Returns:
+        Optional[float]: 計算された残留磁化の平均値。計算に失敗した場合はNone。
+    """
     try:
         Mr_down, Mr_up = (
             np.interp(0, H_down[::-1], M_down[::-1]),
@@ -115,8 +139,21 @@ def calculate_remanence(H_down, M_down, H_up, M_up):
         return None
 
 
-def calculate_coercivity(H_down, M_down, H_up, M_up):
-    """保磁力(Hc)を計算"""
+def calculate_coercivity(
+    H_down: Any, M_down: Any, H_up: Any, M_up: Any
+) -> Optional[Dict[str, float]]:
+    """
+    保磁力(Hc)を計算します (M=0のときのH)。
+
+    Args:
+        H_down (Any): 往路の磁場データ。
+        M_down (Any): 往路の磁化データ。
+        H_up (Any): 復路の磁場データ。
+        M_up (Any): 復路の磁化データ。
+
+    Returns:
+        Optional[Dict[str, float]]: 'T'と'Oe'をキーとする保磁力の辞書。計算失敗時はNone。
+    """
     try:
         Hc_down, Hc_up = (
             np.interp(0, M_down[::-1], H_down[::-1]),
@@ -130,8 +167,24 @@ def calculate_coercivity(H_down, M_down, H_up, M_up):
         return None
 
 
-def calculate_saturation_magnetization(H, M, pos_range=None, neg_range=None):
-    """飽和磁化(Ms)を計算。手動範囲が指定されていればそれを使用する。"""
+def calculate_saturation_magnetization(
+    H: Any,
+    M: Any,
+    pos_range: Optional[Tuple[float, float]] = None,
+    neg_range: Optional[Tuple[float, float]] = None,
+) -> Dict[str, float]:
+    """
+    飽和磁化(Ms)を計算します。手動範囲が指定されていればそれを使用します。
+
+    Args:
+        H (Any): 磁場データ。
+        M (Any): 磁化データ。
+        pos_range (Optional[Tuple[float, float]], optional): 正側の計算範囲 (min, max)。
+        neg_range (Optional[Tuple[float, float]], optional): 負側の計算範囲 (min, max)。
+
+    Returns:
+        Dict[str, float]: 'avg', 'pos', 'neg' をキーとする飽和磁化の計算結果辞書。
+    """
     H, M = np.array(H), np.array(M)
     Ms_pos, Ms_neg = 0, 0
 
@@ -180,6 +233,3 @@ def calculate_saturation_magnetization(H, M, pos_range=None, neg_range=None):
 
     print(f"  飽和磁化 Ms: {Ms_avg:.3f} kA/m (正側: {Ms_pos:.3f}, 負側: {Ms_neg:.3f})")
     return {"avg": Ms_avg, "pos": Ms_pos, "neg": Ms_neg}
-
-
-
