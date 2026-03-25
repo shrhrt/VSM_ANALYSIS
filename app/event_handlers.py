@@ -3,15 +3,30 @@ import tkinter as tk
 from pathlib import Path
 import json
 from tkinter import TclError, filedialog, messagebox, scrolledtext, ttk, colorchooser
+from typing import TYPE_CHECKING, Any
 
 import analysis.file_io as file_io
 
+if TYPE_CHECKING:
+    from app.vsm_app import VSMApp
+
 
 class EventHandlers:
-    def __init__(self, app):
-        self.app = app
+    """
+    GUI上のユーザーアクション（ボタンクリック、ファイル操作など）を処理するクラス。
+    """
 
-    def show_metadata_window(self):
+    def __init__(self, app: "VSMApp") -> None:
+        """
+        EventHandlersのインスタンスを初期化します。
+
+        Args:
+            app (VSMApp): メインアプリケーションのインスタンス。
+        """
+        self.app: "VSMApp" = app
+
+    def show_metadata_window(self) -> None:
+        """読み込まれたファイルの測定情報（メタデータ）を表示するウィンドウを開きます。"""
         if not self.app.all_metadata:
             messagebox.showinfo(
                 "情報", "表示できる測定情報がありません。", parent=self.app.root
@@ -62,7 +77,11 @@ class EventHandlers:
         file_menu.bind("<<ComboboxSelected>>", update_display)
         update_display()
 
-    def load_files(self):
+    def load_files(self) -> None:
+        """
+        ファイル選択ダイアログを開き、選択された新しいVSMファイルを読み込みます。
+        既存のデータはクリアされます。
+        """
         files = filedialog.askopenfilenames(
             title="解析したいVSMファイルを選択",
             filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
@@ -110,8 +129,8 @@ class EventHandlers:
         self.app._update_thickness_settings_ui()
         self.app.graph_manager.update_graph()
 
-    def add_files(self):
-        """既存のデータを保持したままファイルを追加する"""
+    def add_files(self) -> None:
+        """既存のデータを保持したまま、追加でVSMファイルを読み込みます。"""
         files = filedialog.askopenfilenames(
             title="追加するVSMファイルを選択",
             filetypes=[("VSM files", "*.VSM"), ("All files", "*.*")],
@@ -142,9 +161,7 @@ class EventHandlers:
 
             # 色を順番に割り当て
             color_idx = (start_idx + i) % len(self.app.base_colors)
-            color_var = tk.StringVar(
-                value=self.app.base_colors[color_idx]
-            )
+            color_var = tk.StringVar(value=self.app.base_colors[color_idx])
             self.app.file_color_vars.append(color_var)
 
         self.app.info_button.config(
@@ -155,8 +172,13 @@ class EventHandlers:
         self.app._update_thickness_settings_ui()
         self.app.graph_manager.update_graph()
 
-    def remove_file(self, index):
-        """指定されたインデックスのファイルをリストから削除する"""
+    def remove_file(self, index: int) -> None:
+        """
+        指定されたインデックスのファイルをリストから削除します。
+
+        Args:
+            index (int): 削除するファイルのリスト内インデックス。
+        """
         if 0 <= index < len(self.app.vsm_data):
             filename = self.app.vsm_data[index]["path"].name
             if not messagebox.askyesno(
@@ -168,7 +190,7 @@ class EventHandlers:
 
             del self.app.vsm_data[index]
             del self.app.file_color_vars[index]
-            
+
             self.app.info_button.config(
                 state=tk.NORMAL if self.app.vsm_data else tk.DISABLED
             )
@@ -177,7 +199,10 @@ class EventHandlers:
             self.app._update_thickness_settings_ui()
             self.app.graph_manager.update_graph()
 
-    def save_figure(self):
+    def save_figure(self) -> None:
+        """
+        現在のグラフを指定された画像フォーマットとサイズ設定で保存します。
+        """
         try:
             w, h, dpi = (
                 float(self.app.state.save_width_var.get()),
@@ -228,8 +253,8 @@ class EventHandlers:
             self.app.fig.set_size_inches(original_size)
             self.app.canvas.draw_idle()
 
-    def show_advanced_style_window(self):
-        """凡例名などを設定する詳細ウィンドウを表示する"""
+    def show_advanced_style_window(self) -> None:
+        """凡例名、マーカー、軸の数値フォーマットなどを設定する詳細スタイルウィンドウを表示します。"""
         if not self.app.vsm_data:
             messagebox.showinfo(
                 "情報", "設定対象のファイルがありません。", parent=self.app.root
@@ -454,7 +479,8 @@ class EventHandlers:
         ok_button = ttk.Button(button_frame, text="OK", command=on_ok)
         ok_button.pack()
 
-    def show_ms_settings_window(self):
+    def show_ms_settings_window(self) -> None:
+        """飽和磁化 (Ms) を計算するための磁場範囲を手動設定するウィンドウを表示します。"""
         settings_window = tk.Toplevel(self.app.root)
         settings_window.title("飽和磁化(Ms) 計算範囲設定")
         settings_window.geometry("650x500")
@@ -626,7 +652,13 @@ class EventHandlers:
             row=0, column=1, sticky="ew", padx=(5, 0)
         )
 
-    def move_file_up(self, index):
+    def move_file_up(self, index: int) -> None:
+        """
+        ファイルリスト内で指定されたインデックスのファイルを1つ上に移動します。
+
+        Args:
+            index (int): 移動させるファイルのインデックス。
+        """
         if index > 0:
             # Swap data
             self.app.vsm_data.insert(index - 1, self.app.vsm_data.pop(index))
@@ -640,7 +672,13 @@ class EventHandlers:
             self.app._update_thickness_settings_ui()
             self.app.graph_manager.update_graph()
 
-    def move_file_down(self, index):
+    def move_file_down(self, index: int) -> None:
+        """
+        ファイルリスト内で指定されたインデックスのファイルを1つ下に移動します。
+
+        Args:
+            index (int): 移動させるファイルのインデックス。
+        """
         if index < len(self.app.vsm_data) - 1:
             # Swap data
             self.app.vsm_data.insert(index + 1, self.app.vsm_data.pop(index))
@@ -654,7 +692,13 @@ class EventHandlers:
             self.app._update_thickness_settings_ui()
             self.app.graph_manager.update_graph()
 
-    def choose_individual_color(self, index):
+    def choose_individual_color(self, index: int) -> None:
+        """
+        カラーピッカーダイアログを開き、指定されたファイルのプロット色を選択します。
+
+        Args:
+            index (int): 色を変更するファイルのインデックス。
+        """
         if index >= len(self.app.file_color_vars):
             return
         color_var = self.app.file_color_vars[index]
@@ -666,7 +710,8 @@ class EventHandlers:
         if color_code and color_code[1]:
             color_var.set(color_code[1])
 
-    def apply_first_file_settings_to_all(self):
+    def apply_first_file_settings_to_all(self) -> None:
+        """リストの一番上にあるファイルの反磁性補正設定を、他の全てのファイルに適用します。"""
         if len(self.app.vsm_data) < 2:
             return
 
@@ -697,8 +742,8 @@ class EventHandlers:
             parent=self.app.root,
         )
 
-    def save_session(self):
-        """現在のセッション（設定とファイルリスト）をJSONファイルに保存する"""
+    def save_session(self) -> None:
+        """現在のセッション（グローバル設定、ファイルリスト、個別設定）をJSONファイルに保存します。"""
         if not self.app.vsm_data:
             messagebox.showwarning(
                 "保存エラー", "保存するデータがありません。", parent=self.app.root
@@ -746,8 +791,8 @@ class EventHandlers:
                 parent=self.app.root,
             )
 
-    def load_session(self):
-        """JSONファイルからセッションを読み込む"""
+    def load_session(self) -> None:
+        """保存されたJSONファイルからセッション（設定とファイルリスト）を読み込み、状態を復元します。"""
         filepath = filedialog.askopenfilename(
             title="セッションを読み込み",
             filetypes=[("VSM Session Files", "*.vsm_session"), ("All files", "*.*")],

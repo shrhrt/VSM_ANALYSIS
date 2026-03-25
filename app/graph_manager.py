@@ -8,13 +8,32 @@ import tkinter as tk  # tk.StringVarのため
 import io  # StringIOのため
 from contextlib import redirect_stdout  # redirect_stdoutのため
 import sys  # tracebackのため
+from typing import Dict, Any, TYPE_CHECKING
 
 import analysis.file_io as file_io
 import analysis.calculations as vsm_logic
 
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+    from app.vsm_app import VSMApp
 
-def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
-    """グラフの軸や目盛りなどを整形"""
+
+def format_axis(
+    ax: "Axes",
+    fig: "Figure",
+    style_params: Dict[str, Any],
+    unit_mode: str = "SI (T, kA/m)",
+) -> None:
+    """
+    グラフの軸、目盛り、グリッド、ラベルなどを指定されたパラメータに従って整形します。
+
+    Args:
+        ax (Axes): 整形対象のMatplotlib Axesオブジェクト。
+        fig (Figure): 対象のMatplotlib Figureオブジェクト。
+        style_params (Dict[str, Any]): グラフスタイルの設定パラメータを含む辞書。
+        unit_mode (str): 表示する単位系 ("SI (T, kA/m)", "CGS (Oe, emu/cm³)", "Normalized (T, M/Ms)")。
+    """
     # 単位モードに応じて軸ラベルを設定
     if "CGS" in unit_mode:
         ax.set_xlabel(
@@ -138,10 +157,24 @@ def format_axis(ax, fig, style_params, unit_mode="SI (T, kA/m)"):
 
 
 class GraphManager:
-    def __init__(self, app):
-        self.app = app
+    """
+    グラフの描画、更新、および軸の設定を管理するクラス。
+    """
 
-    def update_graph(self):
+    def __init__(self, app: "VSMApp") -> None:
+        """
+        GraphManagerのインスタンスを初期化します。
+
+        Args:
+            app (VSMApp): メインアプリケーションのインスタンス。
+        """
+        self.app: "VSMApp" = app
+
+    def update_graph(self) -> None:
+        """
+        UIの状態を読み取り、それに基づいてグラフを再描画します。
+        ファイルが選択されていない場合はクリアします。
+        """
         self.app.log_text.delete(1.0, tk.END)
         self.app.ax.clear()
         self.app.all_metadata = {}  # app.all_metadata はVsmAppで管理すべきだが、一時的にここに
@@ -229,7 +262,14 @@ class GraphManager:
             state=tk.NORMAL if self.app.all_metadata else tk.DISABLED
         )
 
-    def _process_and_plot(self, params, unit_mode):
+    def _process_and_plot(self, params: Dict[str, Any], unit_mode: str) -> None:
+        """
+        各データファイルの解析処理（反磁性補正、飽和磁化計算など）を行い、グラフにプロットします。
+
+        Args:
+            params (Dict[str, Any]): グラフのスタイルパラメータ。
+            unit_mode (str): 選択されている単位系。
+        """
         self.app.analysis_results = []
         h_min_global, h_max_global = float("inf"), float("-inf")
         print("読み込みファイル:")
@@ -416,7 +456,7 @@ class GraphManager:
                     H_plot_up,
                     M_plot_up,
                     color=color,
-                    label=rf'{data["legend_name_var"].get()}',
+                    label=rf"{data['legend_name_var'].get()}",
                     **plot_kwargs,
                 )
 
