@@ -3,7 +3,7 @@
 **VSM Data Analyzer** は、材料科学研究における磁気特性測定データ（VSM, PPMS）の解析を高度に自動化・効率化するために開発された、デスクトップGUIアプリケーションである。
 複雑なデータ補正から各種物理量の自動算出、そして論文投稿レベルの高品質なグラフ描画までをワンストップで完結させることを目的としている。
 
-![application_screenshot](https://via.placeholder.com/800x600.png?text=ここにアプリのスクリーンショットを挿入)
+![application_screenshot](image.png)
 
 ---
 

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import json
 from pathlib import Path
+import sys
+import os
 import tkinter as tk
 from typing import Dict, Any, TYPE_CHECKING
 
@@ -23,12 +25,23 @@ class LanguageManager:
             app_state (StateManager): アプリケーション全体の状態を管理するオブジェクト。
         """
         self.app_state: "StateManager" = app_state
-        self.locales_dir: Path = Path(__file__).parent.parent / "locales"
+        self.locales_dir: Path = self._get_base_path() / "locales"
         self.translations: Dict[str, Any] = {}
         self.load_language(self.app_state.language_var.get())
 
         # Listen for language changes
         self.app_state.language_var.trace_add("write", self._on_language_change)
+
+    def _get_base_path(self) -> Path:
+        """
+        実行環境のベースパスを取得します。
+        PyInstallerでexe化された場合(sys._MEIPASS)と、通常のPythonスクリプトとして
+        実行された場合の両方に対応します。
+        """
+        if hasattr(sys, "_MEIPASS"):
+            # PyInstallerでパッケージ化された場合の一時フォルダパス
+            return Path(sys._MEIPASS)
+        return Path(__file__).parent.parent
 
     def load_language(self, lang_code: str) -> None:
         """

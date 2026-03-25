@@ -18,6 +18,7 @@ import sv_ttk
 
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
+import app.analysis_tab as analysis_tab
 import app.state_manager as state_manager
 import analysis.file_io as file_io
 import analysis.calculations as vsm_logic
@@ -91,39 +92,37 @@ class VSMApp:
         main_paned_window = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
         main_paned_window.pack(fill=tk.BOTH, expand=True)
 
-        # --- Left Pane (Single Notebook for all controls and outputs) ---
+        # --- 左ペイン (タブ管理) ---
         left_pane = ttk.Frame(main_paned_window, padding=0)
-        main_paned_window.add(left_pane, weight=2)  # Increased weight for left pane
+        main_paned_window.add(left_pane, weight=2)
 
-        self.main_notebook = ttk.Notebook(left_pane)  # Renamed to main_notebook
+        self.main_notebook = ttk.Notebook(left_pane)
         self.main_notebook.pack(fill=tk.BOTH, expand=True)
         self.main_notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
-        # --- Tab Frames ---
+        # --- 各タブのフレーム作成 ---
         tab_analysis = ttk.Frame(self.main_notebook, padding="10")
         tab_style = ttk.Frame(self.main_notebook, padding="10")
-        self.results_tab = ttk.Frame(
-            self.main_notebook, padding="10"
-        )  # Use self.results_tab directly
+        self.results_tab = ttk.Frame(self.main_notebook, padding="10")
         tab_export = ttk.Frame(self.main_notebook, padding="10")
         log_tab = ttk.Frame(self.main_notebook, padding="10")
 
-        # --- Add tabs in specified order ---
+        # --- タブの追加 ---
         self.main_notebook.add(tab_analysis, text="解析")
         self.main_notebook.add(tab_style, text="グラフ設定")
-        self.main_notebook.add(self.results_tab, text="解析結果")  # Results after Style
+        self.main_notebook.add(self.results_tab, text="解析結果")
         self.main_notebook.add(tab_export, text="保存")
-        self.main_notebook.add(log_tab, text="ログ")  # Log last
+        self.main_notebook.add(log_tab, text="ログ")
 
-        # --- Log Text Widget ---
+        # --- ログテキストウィジェット ---
         self.log_text = scrolledtext.ScrolledText(
             log_tab, wrap=tk.WORD, font=("Consolas", 9)
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
-        # --- Right Pane (Graph only) ---
+        # --- 右ペイン (グラフ表示領域) ---
         graph_frame = ttk.LabelFrame(main_paned_window, text=" グラフ ", padding=10)
-        main_paned_window.add(graph_frame, weight=3)  # Decreased weight for graph frame
+        main_paned_window.add(graph_frame, weight=3)
         graph_frame.grid_rowconfigure(1, weight=1)
         graph_frame.grid_columnconfigure(0, weight=1)
 
@@ -136,7 +135,17 @@ class VSMApp:
         self._create_menu()
 
         # --- Create controls and results tab structure ---
-        self._create_analysis_controls(tab_analysis)
+        # 別ファイルに切り出した解析タブのUIを構築
+        self.analysis_tab_view = analysis_tab.AnalysisTab(tab_analysis, self)
+        # 後方互換性のため、他のファイルから参照されるウィジェットを自分自身の属性としてマッピング
+        self.info_button = self.analysis_tab_view.info_button
+        self.thickness_scrollable_frame = (
+            self.analysis_tab_view.thickness_scrollable_frame
+        )
+        self.demag_scrollable_frame = self.analysis_tab_view.demag_scrollable_frame
+        self.apply_to_all_button = self.analysis_tab_view.apply_to_all_button
+        self.ms_settings_button = self.analysis_tab_view.ms_settings_button
+
         self._create_style_controls(tab_style)
         self._create_export_controls(tab_export)
         self._create_results_tab()  # Builds the Treeview inside self.results_tab
@@ -254,146 +263,6 @@ class VSMApp:
         except tk.TclError:
             # This can happen if the tab is in the process of being destroyed
             pass
-
-    def _create_analysis_controls(self, parent: ttk.Frame) -> None:
-        """
-        解析タブ内のコントロール（ファイル操作、解析設定など）を作成します。
-
-        Args:
-            parent (ttk.Frame): コントロールを配置する親フレーム。
-        """
-        file_frame = ttk.LabelFrame(parent, text=" ファイル ", padding="10")
-        file_frame.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(
-            file_frame,
-            text="ファイルを選択 (新規)",
-            command=self.event_handlers.load_files,
-            padding="10 5",
-            style="Accent.TButton",
-        ).pack(fill=tk.X)
-        ttk.Button(
-            file_frame,
-            text="ファイルを追加...",
-            command=self.event_handlers.add_files,
-            padding="10 5",
-        ).pack(fill=tk.X, pady=(5, 0))
-        ttk.Button(
-            file_frame,
-            text="ファイルを全て削除",
-            command=self.clear_all_files,
-            padding="10 5",
-        ).pack(fill=tk.X, pady=(5, 0))
-        self.info_button = ttk.Button(
-            file_frame,
-            text="測定情報を表示",
-            command=self.event_handlers.show_metadata_window,
-            state=tk.DISABLED,
-        )
-        self.info_button.pack(fill=tk.X, pady=(5, 0))
-
-        settings_frame = ttk.LabelFrame(parent, text=" 解析設定 ", padding="10")
-        settings_frame.pack(fill=tk.X, pady=(0, 10))
-        settings_frame.grid_columnconfigure(1, weight=1)
-
-        unit_label = ttk.Label(settings_frame, text="表示単位系:")
-        unit_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
-        unit_combo = ttk.Combobox(
-            settings_frame,
-            textvariable=self.state.unit_mode_var,
-            values=["SI (T, kA/m)", "CGS (Oe, emu/cm³)", "Normalized (T, M/Ms)"],
-            state="readonly",
-        )
-        unit_combo.grid(row=0, column=1, sticky="ew", padx=5, pady=(0, 5))
-
-        self.offset_check = ttk.Checkbutton(
-            settings_frame,
-            text="磁化オフセット補正",
-            variable=self.state.offset_correction_var,
-        )
-        self.offset_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
-        self.legend_check = ttk.Checkbutton(
-            settings_frame, text="凡例を表示", variable=self.state.show_legend_var
-        )
-        self.legend_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=(5, 0))
-
-        thickness_outer_frame = ttk.LabelFrame(
-            parent, text=" 膜厚・面積設定 ", padding="10"
-        )
-        thickness_outer_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        thickness_canvas = tk.Canvas(
-            thickness_outer_frame,
-            borderwidth=0,
-            background=self.get_bg_color(),
-            highlightthickness=0,
-            height=100,
-        )
-        thickness_scrollbar = ttk.Scrollbar(
-            thickness_outer_frame, orient="vertical", command=thickness_canvas.yview
-        )
-        self.thickness_scrollable_frame = ttk.Frame(thickness_canvas)
-
-        self.thickness_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: thickness_canvas.configure(
-                scrollregion=thickness_canvas.bbox("all")
-            ),
-        )
-
-        thickness_canvas.create_window(
-            (0, 0), window=self.thickness_scrollable_frame, anchor="nw"
-        )
-        thickness_canvas.configure(yscrollcommand=thickness_scrollbar.set)
-
-        thickness_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        thickness_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        demag_outer_frame = ttk.LabelFrame(parent, text=" 反磁性補正 ", padding="10")
-        demag_outer_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        # Create a canvas and a scrollbar
-        demag_canvas = tk.Canvas(
-            demag_outer_frame,
-            borderwidth=0,
-            background=self.get_bg_color(),
-            highlightthickness=0,
-            height=200,
-        )
-        demag_scrollbar = ttk.Scrollbar(
-            demag_outer_frame, orient="vertical", command=demag_canvas.yview
-        )
-        self.demag_scrollable_frame = ttk.Frame(demag_canvas)
-
-        self.demag_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: demag_canvas.configure(scrollregion=demag_canvas.bbox("all")),
-        )
-
-        demag_canvas.create_window(
-            (0, 0), window=self.demag_scrollable_frame, anchor="nw"
-        )
-        demag_canvas.configure(yscrollcommand=demag_scrollbar.set)
-
-        demag_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        demag_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.apply_to_all_button = ttk.Button(
-            demag_outer_frame,
-            text="一番上の設定を全ファイルに適用",
-            command=self.event_handlers.apply_first_file_settings_to_all,
-            state=tk.DISABLED,
-        )
-        self.apply_to_all_button.pack(fill=tk.X, pady=(5, 0), padx=5)
-
-        ms_frame = ttk.LabelFrame(parent, text=" 飽和磁化 (Ms) 計算 ", padding="10")
-        ms_frame.pack(fill=tk.X, pady=(0, 10))
-        self.ms_settings_button = ttk.Button(
-            ms_frame,
-            text="計算範囲を手動指定...",
-            command=self.event_handlers.show_ms_settings_window,
-            state=tk.DISABLED,
-        )
-        self.ms_settings_button.pack(fill=tk.X, pady=5)
 
     def _create_style_controls(self, parent: ttk.Frame) -> None:
         """

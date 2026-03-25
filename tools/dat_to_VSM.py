@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PPMS VSM(.dat) から VSM(.VSM) 形式へ変換するプログラム (文字コード修正版)
-
-このプログラムを実行すると、ファイル選択ウィンドウが開きます。
-1. 最初に、変換したいPPMSの.datファイルを選択します。
-2. 次に、変換後の.VSMファイルを保存する場所と名前を指定します。
-3. 変換が実行され、指定した場所に.VSMファイルが作成されます。
+PPMS VSM (.dat) から VSM (.VSM) 形式へ変換するモジュール。
 """
 
 import pandas as pd
@@ -35,7 +30,6 @@ def convert_dat_to_vsm(dat_file_path: str, vsm_file_path: str) -> None:
     data_header: List[str] = []
 
     try:
-        # 【修正点】文字コードを 'utf-8' から 'cp932' に変更しました。
         with open(dat_file_path, "r", encoding="cp932") as f:
             for line in f:
                 line = line.strip()

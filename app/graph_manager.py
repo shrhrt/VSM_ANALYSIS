@@ -177,7 +177,7 @@ class GraphManager:
         """
         self.app.log_text.delete(1.0, tk.END)
         self.app.ax.clear()
-        self.app.all_metadata = {}  # app.all_metadata はVsmAppで管理すべきだが、一時的にここに
+        self.app.all_metadata = {}
 
         unit_mode = self.app.state.unit_mode_var.get()
 
@@ -273,7 +273,8 @@ class GraphManager:
         self.app.analysis_results = []
         h_min_global, h_max_global = float("inf"), float("-inf")
         print("読み込みファイル:")
-        [print(f" {i + 1}: {d['path'].name}") for i, d in enumerate(self.app.vsm_data)]
+        for i, d in enumerate(self.app.vsm_data):
+            print(f" {i + 1}: {d['path'].name}")
 
         for idx, data in enumerate(self.app.vsm_data):
             file, df = data["path"], data["df"]
@@ -360,7 +361,7 @@ class GraphManager:
                     M_final.iloc[min_H_idx_loop:].values,
                 )
 
-                # Create a dictionary to store results for the current file.
+                # 現在のファイル用の解析結果辞書を作成
                 file_results = {
                     "filename": file.stem,
                     "Ms": None,
@@ -429,8 +430,8 @@ class GraphManager:
 
                 self.app.analysis_results.append(file_results)
 
-                # --- グラフ描画単位の処理 ---
-                Ms_avg = file_results["Ms"]  # Keep Ms_avg for normalization logic
+                # --- 単位系に応じたグラフ描画データの処理 ---
+                Ms_avg = file_results["Ms"]
                 if "CGS" in unit_mode:
                     H_plot_down, H_plot_up = H_down * 10000, H_up * 10000
                     M_plot_down, M_plot_up = M_down, M_up
