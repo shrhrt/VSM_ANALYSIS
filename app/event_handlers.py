@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import tkinter as tk
 from pathlib import Path
+import os
 import json
 from tkinter import TclError, filedialog, messagebox, scrolledtext, ttk, colorchooser
 from typing import TYPE_CHECKING, Any
@@ -888,14 +889,24 @@ S = Mr / Ms""",
             return
 
         try:
+            session_file_path = Path(filepath)
+            session_dir = session_file_path.parent
+
             session_data = {
                 "global_settings": self.app.state.to_dict(),
                 "file_specific_data": [],
             }
 
             for i, data in enumerate(self.app.vsm_data):
+                data_path = data["path"].resolve()
+                try:
+                    rel_path = os.path.relpath(str(data_path), str(session_dir))
+                except ValueError:
+                    rel_path = str(data_path)
+
                 file_data = {
-                    "path": str(data["path"].resolve()),
+                    "path": str(data_path),  # 後方互換性用
+                    "relative_path": rel_path,
                     "thickness": data["thickness_var"].get(),
                     "marker_style": data["marker_style_var"].get(),
                     "legend_name": data["legend_name_var"].get(),
@@ -930,6 +941,9 @@ S = Mr / Ms""",
             return
 
         try:
+            session_file_path = Path(filepath)
+            session_dir = session_file_path.parent
+
             with open(filepath, "r", encoding="utf-8") as f:
                 session_data = json.load(f)
 
@@ -941,11 +955,30 @@ S = Mr / Ms""",
             self.app.file_color_vars = []
 
             for file_data in session_data.get("file_specific_data", []):
-                path = Path(file_data["path"])
-                if not path.exists():
+                rel_path_str = file_data.get("relative_path")
+                abs_path_str = file_data.get("path")
+                path = None
+
+                # 1. 相対パスで探す
+                if rel_path_str:
+                    target_path = (session_dir / rel_path_str).resolve()
+                    if target_path.exists():
+                        path = target_path
+                # 2. 絶対パスで探す（同じPCでの読み込みや、古いセッションファイル用）
+                if not path and abs_path_str:
+                    target_path = Path(abs_path_str)
+                    if target_path.exists():
+                        path = target_path
+                # 3. 同じフォルダ内を探す（とりあえず一緒にまとめた場合用）
+                if not path and abs_path_str:
+                    target_path = session_dir / Path(abs_path_str).name
+                    if target_path.exists():
+                        path = target_path
+
+                if not path:
                     messagebox.showwarning(
                         "ファイル欠落",
-                        f"ファイルが見つかりません:\n{path}\nスキップします。",
+                        f"ファイルが見つかりません:\n{abs_path_str or rel_path_str}\nスキップします。",
                         parent=self.app.root,
                     )
                     continue
