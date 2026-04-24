@@ -1,27 +1,27 @@
 # -*- coding: utf-8 -*-
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-from pathlib import Path
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext, colorchooser
-import sys
-import json
-from contextlib import redirect_stdout
 import io
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from tkinter import TclError
+import json
 import platform
-from typing import List, Dict, Any, Optional
-from tkinterdnd2 import DND_FILES
-import sv_ttk
+import sys
+import tkinter as tk
+from contextlib import redirect_stdout
+from pathlib import Path
+from tkinter import TclError, colorchooser, filedialog, messagebox, scrolledtext, ttk
+from typing import Any, Dict, List, Optional
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import sv_ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from tkinterdnd2 import DND_FILES
+
+import analysis.calculations as vsm_logic
+import analysis.file_io as file_io
+import app.analysis_tab as analysis_tab
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
-import app.analysis_tab as analysis_tab
 import app.state_manager as state_manager
-import analysis.file_io as file_io
-import analysis.calculations as vsm_logic
 
 
 # -----------------------------------------------------------------------------
@@ -30,13 +30,12 @@ import analysis.calculations as vsm_logic
 class VSMApp:
     """
     VSMデータ解析アプリケーションのメインGUIクラス。
-
-    UIの構築、各タブの管理、および全体データの保持を行います。
+    UIの構築、各タブの管理、および全体データの保持を行う。
     """
 
-    def __init__(self, root: Any) -> None:
+    def __init__(self, root: tk.Tk) -> None:
         """
-        VSMAppのインスタンスを初期化し、GUIを構築します。
+        VSMAppのインスタンスを初期化し、GUIを構築。
 
         Args:
             root (tk.Tk): Tkinterのメインウィンドウインスタンス。
