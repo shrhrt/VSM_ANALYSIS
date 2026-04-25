@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import sv_ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from tkinterdnd2 import DND_FILES
+from tkinterdnd2 import DND_FILES, TkinterDnD
 
 import analysis.calculations as vsm_logic
 import analysis.file_io as file_io
@@ -33,12 +33,12 @@ class VSMApp:
     UIの構築、各タブの管理、および全体データの保持を行う。
     """
 
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: TkinterDnD.Tk) -> None:
         """
         VSMAppのインスタンスを初期化し、GUIを構築。
 
         Args:
-            root (tk.Tk): Tkinterのメインウィンドウインスタンス。
+            root (TkinterDnD.Tk): Tkinterのメインウィンドウインスタンス。
         """
         # --- Matplotlibの日本語フォント設定 ---
         # より確実に日本語フォントを適用するための設定
@@ -51,15 +51,15 @@ class VSMApp:
             plt.rcParams["font.family"] = "Hiragino Sans"
         else:  # Linuxなど
             # IPAフォントなどがインストールされていることを期待
-            # 必要に応じて 'IPAexGothic' などを指定してください
+            # 必要に応じて 'IPAexGothic' などを指定
             plt.rcParams["font.family"] = ["IPAexGothic", "sans-serif"]
 
-        # フォント変更時に数式レンダリングの警告が出るのを防ぐ
+        # フォント変更時に数式レンダリングの警告が出るのを防ぐ(Windowsはこれがなくても動作を確認)
         plt.rcParams["axes.unicode_minus"] = False
         # ------------------------------------
 
         self.vsm_data: List[Dict[str, Any]] = []
-        self._update_job: Optional[str] = None
+        self._update_job: Optional[str] = None  # strまたはNone。
         self.all_metadata: Dict[str, Dict[str, str]] = {}
         self.analysis_results: List[Dict[str, Any]] = []
         self.file_color_vars: List[tk.StringVar] = []
@@ -68,27 +68,29 @@ class VSMApp:
             "red",
             "blue",
             "limegreen",
-            "purple",  # 4本目
-            "orange",  # 5本目
-            "cyan",  # 6本目
-            "magenta",  # 7本目
-            "brown",  # 8本目
+            "purple",
+            "orange",
+            "cyan",
+            "magenta",
+            "brown",
         ]
 
-        self.root: tk.Tk = root
+        self.root: TkinterDnD.Tk = root
         self.root.title("VSM Data Analyzer")
-        self.root.geometry("1200x850")
+        self.root.geometry("1920x1800")  # Full screen
 
         self.style = ttk.Style(self.root)
         # モダンテーマ「sv_ttk」を適用（デフォルトはライトテーマ）
         sv_ttk.set_theme("light")
         self.root.configure(bg=self.get_bg_color())
 
-        # --- メインレイアウト (PanedWindowベース) ---
+        # --- メインレイアウトの構築 ---
         main_frame = ttk.Frame(root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        main_paned_window = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
+        main_paned_window = ttk.PanedWindow(
+            main_frame, orient=tk.HORIZONTAL
+        )  # 境界線をマウスでドラッグしてサイズ調整
         main_paned_window.pack(fill=tk.BOTH, expand=True)
 
         # --- 左ペイン (タブ管理) ---
@@ -99,14 +101,13 @@ class VSMApp:
         self.main_notebook.pack(fill=tk.BOTH, expand=True)
         self.main_notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
-        # --- 各タブのフレーム作成 ---
-        tab_analysis = ttk.Frame(self.main_notebook, padding="10")
-        tab_style = ttk.Frame(self.main_notebook, padding="10")
-        self.results_tab = ttk.Frame(self.main_notebook, padding="10")
-        tab_export = ttk.Frame(self.main_notebook, padding="10")
-        log_tab = ttk.Frame(self.main_notebook, padding="10")
+        # --- 各タブのフレーム構築 ---
+        tab_analysis = ttk.Frame(self.main_notebook, padding="5")
+        tab_style = ttk.Frame(self.main_notebook, padding="5")
+        self.results_tab = ttk.Frame(self.main_notebook, padding="5")
+        tab_export = ttk.Frame(self.main_notebook, padding="5")
+        log_tab = ttk.Frame(self.main_notebook, padding="5")
 
-        # --- タブの追加 ---
         self.main_notebook.add(tab_analysis, text="解析")
         self.main_notebook.add(tab_style, text="グラフ設定")
         self.main_notebook.add(self.results_tab, text="解析結果")
@@ -115,28 +116,29 @@ class VSMApp:
 
         # --- ログテキストウィジェット ---
         self.log_text = scrolledtext.ScrolledText(
-            log_tab, wrap=tk.WORD, font=("Consolas", 9)
+            log_tab, wrap=tk.WORD, font=("Consolas", 10)
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
-        # --- 右ペイン (グラフ表示領域) ---
-        graph_frame = ttk.LabelFrame(main_paned_window, text=" グラフ ", padding=10)
+        # --- 右ペイン (グラフ表示領域) --- ※左、右の順にaddされる
+        graph_frame = ttk.LabelFrame(main_paned_window, text=" グラフ ", padding=5)
         main_paned_window.add(graph_frame, weight=3)
         graph_frame.grid_rowconfigure(1, weight=1)
         graph_frame.grid_columnconfigure(0, weight=1)
 
-        # --- マネージャーとハンドラーのインスタンスを作成 ---
-        # UI作成より前に初期化する必要がある
+        # --- 依存モジュールの初期化 ---
+        # Note: UI構築で必要になるため、先にインスタンス化
         self.graph_manager = graph_manager.GraphManager(self)
         self.event_handlers = event_handlers.EventHandlers(self)
 
-        # メニューの作成（イベントハンドラー初期化後に呼び出す）
+        # メニューの作成
         self._create_menu()
 
-        # --- Create controls and results tab structure ---
-        # 別ファイルに切り出した解析タブのUIを構築
+        # --- 各タブのUI構築とコントローラーの初期化 ---
         self.analysis_tab_view = analysis_tab.AnalysisTab(tab_analysis, self)
-        # 後方互換性のため、他のファイルから参照されるウィジェットを自分自身の属性としてマッピング
+
+        # 外部モジュールからのアクセスを容易にするため、
+        # 主要なUIコンポーネントをAppクラスのプロパティとして公開
         self.info_button = self.analysis_tab_view.info_button
         self.thickness_scrollable_frame = (
             self.analysis_tab_view.thickness_scrollable_frame
@@ -145,30 +147,45 @@ class VSMApp:
         self.apply_to_all_button = self.analysis_tab_view.apply_to_all_button
         self.ms_settings_button = self.analysis_tab_view.ms_settings_button
 
+        # その他のタブ構築（内部メソッドに処理を隠蔽）
         self._create_style_controls(tab_style)
         self._create_export_controls(tab_export)
-        self._create_results_tab()  # Builds the Treeview inside self.results_tab
+        self._create_results_tab()  # self.results_tabのため空欄
 
-        # --- Embed Graph ---
+        # --- グラフ描画領域のTkinterへの埋め込み ---
         self.fig = plt.figure(figsize=(9, 9), facecolor="white")
         self.ax = self.fig.add_subplot(111)
+
+        # FigureCanvasTkAgg:Matplotlibで作ったfigを、Tkinterの『キャンバス』に変換。
+        # master=graph_frame:graph_frameの中にはめ込む。
         self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
+
+        # Matplotlib標準のナビゲーションツールバーを追加
         toolbar = NavigationToolbar2Tk(self.canvas, graph_frame, pack_toolbar=False)
         toolbar.config(background=self.get_bg_color())
+
+        # メッセージラベルの色の調整
         toolbar._message_label.config(
             background=self.get_bg_color(), foreground="black"
         )
+        # --- ツールバーのUI調整 ---
         for button in toolbar.winfo_children():
             if isinstance(button, (tk.Button, tk.Checkbutton)):
+                # 設定の上書き
                 button.config(
                     background=self.get_bg_color(),
                     foreground="black",
                     highlightbackground=self.get_bg_color(),
                 )
         toolbar.update()
+
+        # --- グラフとツールバーの配置 ---
+        # ツールバーを上段、グラフキャンバスを下段に配置
+        # ウィンドウサイズ変更時にグラフだけが拡大するように設定
         toolbar.grid(row=0, column=0, sticky="ew", padx=5)
         self.canvas.get_tk_widget().grid(row=1, column=0, sticky="nsew")
 
+        # --- グラフの初期化 ---
         self._add_traces()
         self.graph_manager.update_graph()
 
