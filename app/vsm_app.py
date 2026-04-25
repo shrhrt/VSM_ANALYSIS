@@ -200,26 +200,6 @@ class VSMApp:
             color = "#1c1c1c" if sv_ttk.get_theme() == "dark" else "#fafafa"
         return color
 
-    def clear_all_files(self) -> None:
-        """全てのファイルをリストから削除し、UIを初期化します。"""
-        if not self.vsm_data:
-            return
-
-        if not messagebox.askyesno("確認", "全てのファイルを削除しますか？"):
-            return
-
-        self.vsm_data.clear()
-        self.file_color_vars.clear()
-        self.all_metadata.clear()
-        self.analysis_results.clear()
-
-        self._update_file_list_ui()
-        self._update_demag_settings_ui()
-        self._update_thickness_settings_ui()
-        self._update_results_table()
-        self.info_button.config(state=tk.DISABLED)
-        self.graph_manager.update_graph()
-
     def _create_menu(self) -> None:
         """メニューバーを作成してメインウィンドウに配置します。"""
         menubar = tk.Menu(self.root)

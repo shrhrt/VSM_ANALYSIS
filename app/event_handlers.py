@@ -296,6 +296,31 @@ S = Mr / Ms""",
         if files:
             self._process_loaded_files(files, append=True)
 
+    def clear_all_files(self) -> None:
+        """全てのファイルをリストから削除し、UIを初期化。"""
+        if not self.app.vsm_data:
+            return
+
+        # ユーザーに確認ダイアログを表示
+        if not messagebox.askyesno(
+            "確認", "全てのファイルを削除しますか？", parent=self.app.root
+        ):
+            return
+
+        # アプリケーションが保持している各種データモデルをメモリ上からクリア
+        self.app.vsm_data.clear()
+        self.app.file_color_vars.clear()
+        self.app.all_metadata.clear()
+        self.app.analysis_results.clear()
+
+        # UIコンポーネントを再構築・初期化
+        self.app._update_file_list_ui()
+        self.app._update_demag_settings_ui()
+        self.app._update_thickness_settings_ui()
+        self.app._update_results_table()
+        self.app.info_button.config(state=tk.DISABLED)
+        self.app.graph_manager.update_graph()
+
     def remove_file(self, index: int) -> None:
         """
         指定されたインデックスのファイルをリストから削除します。

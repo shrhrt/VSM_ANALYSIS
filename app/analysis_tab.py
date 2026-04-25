@@ -48,7 +48,7 @@ class AnalysisTab:
         ttk.Button(
             file_frame,
             text="ファイルを全て削除",
-            command=self.app.clear_all_files,
+            command=self.app.event_handlers.clear_all_files,
             padding="10 5",
         ).pack(fill=tk.X, pady=(5, 0))
         self.info_button = ttk.Button(
