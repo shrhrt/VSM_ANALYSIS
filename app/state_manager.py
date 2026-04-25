@@ -6,11 +6,11 @@ from typing import Dict, Any
 class StateManager:
     """
     アプリケーション全体の状態（設定値など）を管理するクラス。
-    tk.StringVarなどのUIにバインドされる変数を一元管理する。
+    tk.StringVarなどのUIにバインドされる変数を一元管理。
     """
 
     def __init__(self) -> None:
-        """状態管理変数の初期化を行います。"""
+        """状態管理変数の初期化"""
         # --- スタイル変数 ---
         self.area_var: tk.StringVar = tk.StringVar(value="1.0")
         self.offset_correction_var: tk.BooleanVar = tk.BooleanVar(value=True)

@@ -259,16 +259,16 @@ class VSMApp:
             # 選択されたタブの現在の表示テキストを取得
             tab_text = notebook.tab(selected_tab_id, "text")
 
-            # 解析結果タブが選択され、かつ名前に未読通知マーク「*」が付いている場合、それを消去して既読状態にする
+            # 解析結果タブが選択され、かつ名前に未読通知マーク「*」が付いている場合、それを消去して既読状態に
             if selected_tab_id == str(self.results_tab) and tab_text.endswith("*"):
                 notebook.tab(selected_tab_id, text="解析結果")
         except tk.TclError:
-            # アプリケーションの終了時など、タブが破棄されている最中にイベントが発火した場合の例外を安全に無視する
+            # タブが破棄されている最中にイベントが発火した場合の例外を安全に無視
             pass
 
     def _create_style_controls(self, parent: ttk.Frame) -> None:
         """
-        グラフ設定タブ内のコントロール（軸、プロット、描画範囲など）を作成します。
+        グラフ設定タブ内のコントロール（軸、プロット、描画範囲など）を作成。
 
         Args:
             parent (ttk.Frame): コントロールを配置する親フレーム。
@@ -308,6 +308,8 @@ class VSMApp:
             values=["-", "--", "-.", ":"],  # Solid, Dashed, Dash-dot, Dotted
             state="readonly",
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=(5, 0))
+
+        # --- プロット設定フレーム（マーカーサイズ、線幅など） ---
         plot_frame = ttk.LabelFrame(parent, text=" プロット ", padding="10")
         plot_frame.pack(fill=tk.X, pady=(0, 10))
         plot_frame.grid_columnconfigure(1, weight=1)
@@ -323,6 +325,8 @@ class VSMApp:
         ttk.Entry(plot_frame, textvariable=self.state.line_width_var, width=10).grid(
             row=1, column=1, sticky="ew", padx=5, pady=(0, 5)
         )
+
+        # --- フォントサイズ設定フレーム（軸ラベル、目盛り、凡例など） ---
         font_frame = ttk.LabelFrame(parent, text=" フォントサイズ ", padding="10")
         font_frame.pack(fill=tk.X, pady=(0, 10))
         font_frame.grid_columnconfigure(1, weight=1)
@@ -344,18 +348,20 @@ class VSMApp:
         ttk.Entry(
             font_frame, textvariable=self.state.legend_fontsize_var, width=10
         ).grid(row=2, column=1, sticky="ew", padx=5, pady=(0, 5))
+
+        # --- 個別ファイル設定フレーム（リスト順、プロット色など） ---
         self.individual_color_frame = ttk.LabelFrame(
             parent, text=" ファイルリストと描画順 ", padding="10"
         )
         self.individual_color_frame.pack(fill=tk.X, pady=(10, 0))
         self.individual_color_frame.grid_columnconfigure(1, weight=1)
 
-        # --- 詳細設定ボタンを追加 ---
+        # --- 詳細設定ボタン ---
         adv_settings_frame = ttk.LabelFrame(parent, text=" 詳細設定 ", padding="10")
         adv_settings_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(
             adv_settings_frame,
-            text="軸・凡例・線のスタイルを設定...",
+            text="凡例・線のスタイル・軸を設定...",
             command=self.event_handlers.show_advanced_style_window,
         ).pack(fill=tk.X, pady=5)
 
@@ -426,7 +432,7 @@ class VSMApp:
         ).pack(fill=tk.X, expand=True, side=tk.BOTTOM)
 
     def _add_traces(self) -> None:
-        """状態変数(StateManagerの変数)の変更を監視し、変更時にグラフ更新をスケジュールします。"""
+        """状態変数(StateManagerの変数)の変更を監視し、変更時にグラフ更新をスケジュール。"""
         trace_vars = [
             self.state.offset_correction_var,
             self.state.show_legend_var,
