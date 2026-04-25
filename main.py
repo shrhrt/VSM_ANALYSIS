@@ -2,7 +2,7 @@
 """
 アプリケーションのエントリポイント
 """
-import tkinter as tk
+
 from tkinterdnd2 import TkinterDnD
 from app.vsm_app import VSMApp
 

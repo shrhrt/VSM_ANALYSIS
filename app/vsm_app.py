@@ -1,23 +1,15 @@
 # -*- coding: utf-8 -*-
-import io
-import json
 import platform
-import sys
 import tkinter as tk
-from contextlib import redirect_stdout
-from pathlib import Path
-from tkinter import TclError, colorchooser, filedialog, messagebox, scrolledtext, ttk
+from tkinter import ttk, scrolledtext, messagebox
 from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import sv_ttk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends._backend_tk import NavigationToolbar2Tk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-import analysis.calculations as vsm_logic
-import analysis.file_io as file_io
 import app.analysis_tab as analysis_tab
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
@@ -147,7 +139,7 @@ class VSMApp:
         self.apply_to_all_button = self.analysis_tab_view.apply_to_all_button
         self.ms_settings_button = self.analysis_tab_view.ms_settings_button
 
-        # その他のタブ構築（内部メソッドに処理を隠蔽）
+        # その他のタブ構築
         self._create_style_controls(tab_style)
         self._create_export_controls(tab_export)
         self._create_results_tab()  # self.results_tabのため空欄
@@ -201,10 +193,12 @@ class VSMApp:
         return color
 
     def _create_menu(self) -> None:
-        """メニューバーを作成してメインウィンドウに配置します。"""
+        """メニューバーを作成してメインウィンドウに配置"""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
+        # --- ファイルメニュー ---
+        # メニューをウィンドウから切り離す機能（点線）を無効化
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="ファイル", menu=file_menu)
 
@@ -217,6 +211,7 @@ class VSMApp:
             command=lambda: self.event_handlers.save_session(),
         )
 
+        # --- ツールメニュー ---
         tool_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="ツール", menu=tool_menu)
         tool_menu.add_command(
@@ -224,13 +219,16 @@ class VSMApp:
             command=lambda: self.event_handlers.convert_dat_file(),
         )
 
+        # --- 表示メニュー ---
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="表示", menu=view_menu)
+        # テーマ（ライト/ダーク）を切り替える
         view_menu.add_command(
             label="ライト / ダーク 切り替え",
             command=sv_ttk.toggle_theme,
         )
 
+        # --- ヘルプメニュー ---
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="ヘルプ", menu=help_menu)
         help_menu.add_command(
@@ -245,19 +243,27 @@ class VSMApp:
         Args:
             event (tk.Event): 発生したイベント情報。
         """
-        selected_tab_id = event.widget.select()
-        # Ensure we have a valid tab selected
+        # 型ガード
+        notebook = event.widget
+        if not isinstance(notebook, ttk.Notebook):
+            return
+
+        # Notebookから、現在選択されているタブの内部IDを取得
+        selected_tab_id = notebook.select()
+
+        # タブが全く選択されていない場合は早期リターン
         if not selected_tab_id:
             return
 
         try:
-            tab_text = event.widget.tab(selected_tab_id, "text")
+            # 選択されたタブの現在の表示テキストを取得
+            tab_text = notebook.tab(selected_tab_id, "text")
 
-            # If the user selects the results tab and it has the notification, reset it
+            # 解析結果タブが選択され、かつ名前に未読通知マーク「*」が付いている場合、それを消去して既読状態にする
             if selected_tab_id == str(self.results_tab) and tab_text.endswith("*"):
-                event.widget.tab(selected_tab_id, text="解析結果")
+                notebook.tab(selected_tab_id, text="解析結果")
         except tk.TclError:
-            # This can happen if the tab is in the process of being destroyed
+            # アプリケーションの終了時など、タブが破棄されている最中にイベントが発火した場合の例外を安全に無視する
             pass
 
     def _create_style_controls(self, parent: ttk.Frame) -> None:
