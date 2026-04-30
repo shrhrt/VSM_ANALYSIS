@@ -4,7 +4,7 @@
 
 **VSM Data Analyzer** は、磁気特性測定データ（VSM, PPMS）の解析を高度に自動化・効率化するために開発されたデスクトップGUIアプリケーションである。煩雑なデータの補正から各種物理量の自動算出、そして高精細なグラフ描画までをワンストップで完結させることができる。
 
-![アプリケーション外観](assets/vsm_data_analyzer_overview.png)
+![アプリケーション外観](assets/images/vsm_data_analyzer_overview.png)
 
 ---
 
@@ -54,7 +54,7 @@
 
 ### 3. インタラクティブなグラフ描画
 
-![グラフ詳細設定](assets/vsm_graph_style.png)
+![グラフ詳細設定](assets/images/vsm_graph_style.png)
 
 - **単位系のワンクリック切り替え**: SI単位系 (T, kA/m)、CGS単位系 (Oe, emu/cm³)、規格化 ($M/M_s$) を、UIのプルダウンからリアルタイムに変更できる。
 - **詳細なスタイル制御**: Matplotlibを基盤とし、線の太さ、マーカーの形状・色、フォントサイズ、グリッド線、凡例の透過度・配置など、学会誌の厳格なフォーマット要求に応える詳細なカスタマイズが可能である。
@@ -95,7 +95,7 @@
 ### 実行ファイル (.exe) による利用（一般ユーザー向け）
 
 1. **ダウンロード**
-   GitHubの [Releases ページ](https://github.com/shrhrt/VSM_ANALYSIS/releases) より、最新バージョンのzipファイルをダウンロードする。
+   GitHubの [Releases ページ](https://github.com/shrhrt/VSM_ANALYSIS/releases/tag/v1.0) より、最新バージョンのzipファイルをダウンロードする。
 2. **展開と配置**
    ダウンロードしたzipファイルを解凍し、任意のフォルダに配置する。
 3. **起動**
