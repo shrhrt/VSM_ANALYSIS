@@ -17,6 +17,25 @@ import app.state_manager as state_manager
 
 
 # -----------------------------------------------------------------------------
+# ソートユーティリティ
+# -----------------------------------------------------------------------------
+
+_NUMERIC_COLS = {"ms", "mr", "hc", "sq"}
+
+
+def _make_sort_key(value: str, col: str) -> tuple:
+    """Treeview のソートキーを生成する。N/A は常に末尾、数値列は数値比較。"""
+    if value == "N/A":
+        return (1, 0.0, "")
+    if col in _NUMERIC_COLS:
+        try:
+            return (0, float(value), "")
+        except ValueError:
+            return (1, 0.0, "")
+    return (0, 0.0, value)
+
+
+# -----------------------------------------------------------------------------
 # GUIアプリケーションのクラス
 # -----------------------------------------------------------------------------
 class VSMApp:
@@ -52,6 +71,7 @@ class VSMApp:
 
         self.vsm_data: List[Dict[str, Any]] = []
         self._update_job: Optional[str] = None  # strまたはNone。
+        self._sort_ascending: Dict[str, bool] = {}
         self.all_metadata: Dict[str, Dict[str, str]] = {}
         self.analysis_results: List[Dict[str, Any]] = []
         self.file_color_vars: List[tk.StringVar] = []
@@ -876,12 +896,18 @@ class VSMApp:
             frame, columns=columns, show="headings", selectmode="extended"
         )
 
-        # Define headings
-        self.results_tree.heading("filename", text="ファイル名")
-        self.results_tree.heading("ms", text="飽和磁化 Ms (kA/m)")
-        self.results_tree.heading("mr", text="残留磁化 Mr (kA/m)")
-        self.results_tree.heading("hc", text="保磁力 Hc (Oe)")
-        self.results_tree.heading("sq", text="角形比 (S = Mr/Ms)")
+        # Define headings — command でクリックソートを有効化
+        self._col_labels = {
+            "filename": "ファイル名",
+            "ms": "飽和磁化 Ms (kA/m)",
+            "mr": "残留磁化 Mr (kA/m)",
+            "hc": "保磁力 Hc (Oe)",
+            "sq": "角形比 (S = Mr/Ms)",
+        }
+        for col, label in self._col_labels.items():
+            self.results_tree.heading(
+                col, text=label, command=lambda c=col: self._sort_column(c)
+            )
 
         # Define column properties
         self.results_tree.column("filename", anchor="w", width=200)
@@ -939,6 +965,27 @@ class VSMApp:
             )
             self.results_tree.insert(
                 "", "end", values=(res["filename"], ms_str, mr_str, hc_str, sq_str)
+            )
+
+    def _sort_column(self, col: str) -> None:
+        """解析結果テーブルを指定列でソートし、ヘッダーに矢印を表示します。"""
+        ascending = not self._sort_ascending.get(col, True)
+        self._sort_ascending[col] = ascending
+
+        rows = [
+            (self.results_tree.set(child, col), child)
+            for child in self.results_tree.get_children("")
+        ]
+        rows.sort(key=lambda x: _make_sort_key(x[0], col), reverse=not ascending)
+        for i, (_, child) in enumerate(rows):
+            self.results_tree.move(child, "", i)
+
+        arrow = " ▲" if ascending else " ▼"
+        for c, label in self._col_labels.items():
+            self.results_tree.heading(
+                c,
+                text=label + (arrow if c == col else ""),
+                command=lambda c=c: self._sort_column(c),
             )
 
     def _copy_results_to_clipboard(self) -> None:
