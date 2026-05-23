@@ -14,6 +14,7 @@ import app.analysis_tab as analysis_tab
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
 import app.state_manager as state_manager
+import app.theme as theme
 from analysis.tex_utils import tex_to_display
 
 
@@ -96,6 +97,7 @@ class VSMApp:
         self.style = ttk.Style(self.root)
         # モダンテーマ「sv_ttk」を適用（デフォルトはライトテーマ）
         sv_ttk.set_theme("light")
+        theme.apply_theme(self.style)
         self.root.configure(bg=self.get_bg_color())
 
         # --- ステータスバー（先にpackしてから main_frame をpackする必要がある）---
@@ -133,12 +135,12 @@ class VSMApp:
 
         # --- ログテキストウィジェット ---
         self.log_text = scrolledtext.ScrolledText(
-            log_tab, wrap=tk.WORD, font=("Consolas", 10)
+            log_tab, wrap=tk.WORD, font=theme.FONT_LOG
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
         # --- 右ペイン (グラフ表示領域) --- ※左、右の順にaddされる
-        graph_frame = ttk.LabelFrame(main_paned_window, text=" グラフ ", padding=5)
+        graph_frame = ttk.Frame(main_paned_window, padding=5)
         main_paned_window.add(graph_frame, weight=3)
         graph_frame.grid_rowconfigure(1, weight=1)
         graph_frame.grid_columnconfigure(0, weight=1)
@@ -218,13 +220,13 @@ class VSMApp:
         self._status_files_var = tk.StringVar(value="ファイル未読込")
         self._status_time_var = tk.StringVar(value="")
 
-        ttk.Label(bar, textvariable=self._status_files_var, anchor="w").pack(
+        ttk.Label(bar, textvariable=self._status_files_var, anchor="w", style="Status.TLabel").pack(
             side=tk.LEFT, padx=(8, 0)
         )
         ttk.Separator(bar, orient="vertical").pack(
             side=tk.LEFT, fill=tk.Y, padx=8, pady=2
         )
-        ttk.Label(bar, textvariable=self._status_time_var, anchor="w").pack(
+        ttk.Label(bar, textvariable=self._status_time_var, anchor="w", style="Status.TLabel").pack(
             side=tk.LEFT
         )
 
@@ -280,7 +282,7 @@ class VSMApp:
         # テーマ（ライト/ダーク）を切り替える
         view_menu.add_command(
             label="ライト / ダーク 切り替え",
-            command=sv_ttk.toggle_theme,
+            command=self._toggle_theme,
         )
 
         # --- ヘルプメニュー ---
@@ -290,6 +292,12 @@ class VSMApp:
             label="計算ロジックの解説",
             command=self.event_handlers.show_calculation_logic_window,
         )
+
+    def _toggle_theme(self) -> None:
+        """テーマを切り替え、カスタムスタイルと tk.Label 背景色を再適用する。"""
+        sv_ttk.toggle_theme()
+        theme.apply_theme(self.style)
+        theme.refresh_section_title_bg(self.root)
 
     def _on_tab_changed(self, event: tk.Event) -> None:
         """
@@ -329,8 +337,8 @@ class VSMApp:
             parent (ttk.Frame): コントロールを配置する親フレーム。
         """
         parent.grid_columnconfigure(1, weight=1)
-        axis_grid_frame = ttk.LabelFrame(parent, text=" 軸とグリッド ", padding="10")
-        axis_grid_frame.pack(fill=tk.X, pady=(0, 10))
+        axis_grid_section, axis_grid_frame = theme.make_section(parent, "軸とグリッド")
+        axis_grid_section.pack(fill=tk.X, pady=(0, 10))
         ttk.Checkbutton(
             axis_grid_frame, text="グリッド線を表示", variable=self.state.show_grid_var
         ).pack(anchor="w")
@@ -365,8 +373,8 @@ class VSMApp:
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=(5, 0))
 
         # --- プロット設定フレーム（マーカーサイズ、線幅など） ---
-        plot_frame = ttk.LabelFrame(parent, text=" プロット ", padding="10")
-        plot_frame.pack(fill=tk.X, pady=(0, 10))
+        plot_section, plot_frame = theme.make_section(parent, "プロット")
+        plot_section.pack(fill=tk.X, pady=(0, 10))
         plot_frame.grid_columnconfigure(1, weight=1)
         ttk.Label(plot_frame, text="マーカーサイズ:").grid(
             row=0, column=0, sticky="w", pady=(0, 5)
@@ -382,8 +390,8 @@ class VSMApp:
         )
 
         # --- フォントサイズ設定フレーム（軸ラベル、目盛り、凡例など） ---
-        font_frame = ttk.LabelFrame(parent, text=" フォントサイズ ", padding="10")
-        font_frame.pack(fill=tk.X, pady=(0, 10))
+        font_section, font_frame = theme.make_section(parent, "フォントサイズ")
+        font_section.pack(fill=tk.X, pady=(0, 10))
         font_frame.grid_columnconfigure(1, weight=1)
         ttk.Label(font_frame, text="軸ラベル:").grid(
             row=0, column=0, sticky="w", pady=(0, 5)
@@ -405,23 +413,23 @@ class VSMApp:
         ).grid(row=2, column=1, sticky="ew", padx=5, pady=(0, 5))
 
         # --- 個別ファイル設定フレーム（リスト順、プロット色など） ---
-        self.individual_color_frame = ttk.LabelFrame(
-            parent, text=" ファイルリストと描画順 ", padding="10"
+        individual_color_section, self.individual_color_frame = theme.make_section(
+            parent, "ファイルリストと描画順"
         )
-        self.individual_color_frame.pack(fill=tk.X, pady=(10, 0))
+        individual_color_section.pack(fill=tk.X, pady=(10, 0))
         self.individual_color_frame.grid_columnconfigure(1, weight=1)
 
         # --- 詳細設定ボタン ---
-        adv_settings_frame = ttk.LabelFrame(parent, text=" 詳細設定 ", padding="10")
-        adv_settings_frame.pack(fill=tk.X, pady=(10, 0))
+        adv_settings_section, adv_settings_frame = theme.make_section(parent, "詳細設定")
+        adv_settings_section.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(
             adv_settings_frame,
             text="凡例・線のスタイル・軸を設定...",
             command=self.event_handlers.show_advanced_style_window,
         ).pack(fill=tk.X, pady=5)
 
-        axes_frame = ttk.LabelFrame(parent, text=" 描画範囲 ", padding="10")
-        axes_frame.pack(fill=tk.X, pady=(0, 10))
+        axes_section, axes_frame = theme.make_section(parent, "描画範囲")
+        axes_section.pack(fill=tk.X, pady=(0, 10))
         axes_frame.grid_columnconfigure(1, weight=1)
         axes_frame.grid_columnconfigure(3, weight=1)
         ttk.Label(axes_frame, text="X軸 (T):").grid(row=0, column=0, sticky="w")
@@ -451,10 +459,8 @@ class VSMApp:
             parent (ttk.Frame): コントロールを配置する親フレーム。
         """
         # --- 1. 画像サイズ設定フレームの構築 ---
-        save_settings_frame = ttk.LabelFrame(
-            parent, text=" 画像サイズ設定 ", padding="10"
-        )
-        save_settings_frame.pack(fill=tk.X, pady=(0, 10))
+        save_settings_section, save_settings_frame = theme.make_section(parent, "画像サイズ設定")
+        save_settings_section.pack(fill=tk.X, pady=(0, 10))
         save_settings_frame.grid_columnconfigure(1, weight=1)
 
         ttk.Label(save_settings_frame, text="幅:").grid(
@@ -474,8 +480,8 @@ class VSMApp:
         ttk.Label(save_settings_frame, text="inch").grid(row=1, column=2, sticky="w")
 
         # --- 2. 解像度(DPI)設定フレームの構築 ---
-        dpi_frame = ttk.LabelFrame(parent, text=" 解像度設定 ", padding="10")
-        dpi_frame.pack(fill=tk.X, pady=(0, 10))
+        dpi_section, dpi_frame = theme.make_section(parent, "解像度設定")
+        dpi_section.pack(fill=tk.X, pady=(0, 10))
         dpi_frame.grid_columnconfigure(1, weight=1)
         # DPIのラベルを左端に配置。
         ttk.Label(dpi_frame, text="DPI:").grid(row=0, column=0, sticky="w", pady=3)
@@ -577,6 +583,7 @@ class VSMApp:
                 text="✕",
                 width=3,
                 command=lambda idx=i: self.event_handlers.remove_file(idx),
+                style="Danger.TButton",
             ).pack(side=tk.LEFT, padx=(0, 5))
 
             # --- ファイル名ラベル ---
@@ -695,10 +702,10 @@ class VSMApp:
             }
 
             # --- Create Widgets ---
-            frame = ttk.LabelFrame(
-                self.demag_scrollable_frame, text=data["path"].name, padding=10
+            frame_section, frame = theme.make_section(
+                self.demag_scrollable_frame, data["path"].name
             )
-            frame.pack(fill=tk.X, expand=True, pady=5, padx=5)
+            frame_section.pack(fill=tk.X, expand=True, pady=5, padx=5)
             frame.grid_columnconfigure(1, weight=1)
             frame.grid_columnconfigure(3, weight=1)
 
@@ -838,6 +845,7 @@ class VSMApp:
                 text="✕",
                 width=3,
                 command=lambda idx=i: self.event_handlers.remove_file(idx),
+                style="Danger.TButton",
             ).grid(row=0, column=7, sticky="w", padx=(10, 0))
 
             thickness_var.trace_add(
@@ -958,6 +966,7 @@ class VSMApp:
         self.results_tree.grid(row=0, column=0, sticky="nsew")
         vsb.grid(row=0, column=1, sticky="ns")
         hsb.grid(row=1, column=0, sticky="ew")
+        theme.setup_treeview_tags(self.results_tree)
 
         frame.grid_rowconfigure(0, weight=1)
         frame.grid_columnconfigure(0, weight=1)
@@ -990,15 +999,17 @@ class VSMApp:
             return
 
         # Insert new data
-        for res in self.analysis_results:
+        for idx, res in enumerate(self.analysis_results):
             ms_str = f"{res['Ms']:.1f}" if res["Ms"] is not None else "N/A"
             mr_str = f"{res['Mr']:.1f}" if res["Mr"] is not None else "N/A"
             hc_str = f"{res['Hc_Oe']:.1f}" if res["Hc_Oe"] is not None else "N/A"
             sq_str = (
                 f"{res['squareness']:.3f}" if res["squareness"] is not None else "N/A"
             )
+            tag = "evenrow" if idx % 2 == 0 else "oddrow"
             self.results_tree.insert(
-                "", "end", values=(tex_to_display(res["filename"]), ms_str, mr_str, hc_str, sq_str)
+                "", "end", values=(tex_to_display(res["filename"]), ms_str, mr_str, hc_str, sq_str),
+                tags=(tag,),
             )
 
     def _sort_column(self, col: str) -> None:
@@ -1013,6 +1024,8 @@ class VSMApp:
         rows.sort(key=lambda x: _make_sort_key(x[0], col), reverse=not ascending)
         for i, (_, child) in enumerate(rows):
             self.results_tree.move(child, "", i)
+            tag = "evenrow" if i % 2 == 0 else "oddrow"
+            self.results_tree.item(child, tags=(tag,))
 
         arrow = " ▲" if ascending else " ▼"
         for c, label in self._col_labels.items():

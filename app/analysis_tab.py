@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+import app.theme as theme
+
 if TYPE_CHECKING:
     from app.vsm_app import VSMApp
 
@@ -30,8 +32,8 @@ class AnalysisTab:
         parent = self.parent
 
         # --- ファイル操作フレーム ---
-        file_frame = ttk.LabelFrame(parent, text=" ファイル ", padding="10")
-        file_frame.pack(fill=tk.X, pady=(0, 10))
+        file_section, file_frame = theme.make_section(parent, "ファイル")
+        file_section.pack(fill=tk.X, pady=(0, 10))
         ttk.Button(
             file_frame,
             text="ファイルを選択 (新規)",
@@ -50,6 +52,7 @@ class AnalysisTab:
             text="ファイルを全て削除",
             command=self.app.event_handlers.clear_all_files,
             padding="10 5",
+            style="Danger.TButton",
         ).pack(fill=tk.X, pady=(5, 0))
         self.info_button = ttk.Button(
             file_frame,
@@ -60,8 +63,8 @@ class AnalysisTab:
         self.info_button.pack(fill=tk.X, pady=(5, 0))
 
         # --- 解析設定フレーム ---
-        settings_frame = ttk.LabelFrame(parent, text=" 解析設定 ", padding="10")
-        settings_frame.pack(fill=tk.X, pady=(0, 10))
+        settings_section, settings_frame = theme.make_section(parent, "解析設定")
+        settings_section.pack(fill=tk.X, pady=(0, 10))
         settings_frame.grid_columnconfigure(1, weight=1)
 
         unit_label = ttk.Label(settings_frame, text="表示単位系:")
@@ -84,10 +87,8 @@ class AnalysisTab:
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(5, 0))
 
         # --- 膜厚・面積設定フレーム ---
-        thickness_outer_frame = ttk.LabelFrame(
-            parent, text=" 膜厚・面積設定 ", padding="10"
-        )
-        thickness_outer_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        thickness_section, thickness_outer_frame = theme.make_section(parent, "膜厚・面積設定")
+        thickness_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         thickness_canvas = tk.Canvas(
             thickness_outer_frame,
@@ -114,8 +115,8 @@ class AnalysisTab:
         thickness_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # --- 反磁性補正フレーム ---
-        demag_outer_frame = ttk.LabelFrame(parent, text=" 反磁性補正 ", padding="10")
-        demag_outer_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        demag_section, demag_outer_frame = theme.make_section(parent, "反磁性補正")
+        demag_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         demag_canvas = tk.Canvas(
             demag_outer_frame,
@@ -148,8 +149,8 @@ class AnalysisTab:
         self.apply_to_all_button.pack(fill=tk.X, pady=(5, 0), padx=5)
 
         # --- Ms計算フレーム ---
-        ms_frame = ttk.LabelFrame(parent, text=" 飽和磁化 (Ms) 計算 ", padding="10")
-        ms_frame.pack(fill=tk.X, pady=(0, 10))
+        ms_section, ms_frame = theme.make_section(parent, "飽和磁化 (Ms) 計算")
+        ms_section.pack(fill=tk.X, pady=(0, 10))
         self.ms_settings_button = ttk.Button(
             ms_frame,
             text="計算範囲を手動指定...",

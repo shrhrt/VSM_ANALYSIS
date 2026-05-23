@@ -7,6 +7,7 @@ from tkinter import TclError, filedialog, messagebox, scrolledtext, ttk, colorch
 from typing import TYPE_CHECKING, Any
 
 import analysis.file_io as file_io
+import app.theme as theme
 import tools.dat_to_VSM as dat_converter
 
 if TYPE_CHECKING:
@@ -83,7 +84,7 @@ class EventHandlers:
         )
         file_menu.pack(fill=tk.X, expand=True)
         text_widget = scrolledtext.ScrolledText(
-            info_window, wrap=tk.WORD, font=("Arial", 10), bg="white", fg="black"
+            info_window, wrap=tk.WORD, font=theme.FONT_BODY
         )
         text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
 
@@ -181,7 +182,7 @@ S = Mr / Ms""",
         left_frame = ttk.Frame(main_paned_window, padding=0)
         main_paned_window.add(left_frame, weight=1)
         listbox = tk.Listbox(
-            left_frame, font=("Arial", 11), selectmode=tk.SINGLE, exportselection=False
+            left_frame, font=(theme.FONT_FAMILY, 11), selectmode=tk.SINGLE, exportselection=False
         )
         for topic in topics:
             listbox.insert(tk.END, topic)
@@ -191,7 +192,7 @@ S = Mr / Ms""",
         right_frame = ttk.Frame(main_paned_window, padding=0)
         main_paned_window.add(right_frame, weight=3)
         text_widget = scrolledtext.ScrolledText(
-            right_frame, wrap=tk.WORD, font=("Arial", 11), padx=15, pady=15
+            right_frame, wrap=tk.WORD, font=(theme.FONT_FAMILY, 11), padx=15, pady=15
         )
         text_widget.pack(fill=tk.BOTH, expand=True)
 
@@ -423,8 +424,8 @@ S = Mr / Ms""",
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # --- 凡例設定フレーム ---
-        legend_frame = ttk.LabelFrame(main_frame, text="凡例名の設定", padding=10)
-        legend_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        legend_section, legend_frame = theme.make_section(main_frame, "凡例名の設定")
+        legend_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         canvas = tk.Canvas(
             legend_frame,
@@ -460,16 +461,14 @@ S = Mr / Ms""",
         hint_label = ttk.Label(
             scrollable_frame,
             text="ヒント: 下付き文字やギリシャ文字(γ)は TeX 形式で入力できます (例: $H_2O$, $\gamma$)",
-            font=("Arial", 9, "italic"),
+            font=theme.FONT_HINT,
             foreground="gray",
         )
         hint_label.pack(fill=tk.X, pady=(10, 0), padx=5)
 
         # --- 凡例ボックス設定フレーム ---
-        legend_box_frame = ttk.LabelFrame(
-            main_frame, text="凡例ボックス設定", padding=10
-        )
-        legend_box_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        legend_box_section, legend_box_frame = theme.make_section(main_frame, "凡例ボックス設定")
+        legend_box_section.pack(fill=tk.X, expand=True, pady=(0, 10))
         legend_box_frame.grid_columnconfigure(1, weight=1)
 
         # 配置場所
@@ -525,8 +524,8 @@ S = Mr / Ms""",
         ).grid(row=3, column=1, sticky="ew", padx=5, pady=2)
 
         # --- マーカー設定フレーム ---
-        marker_frame = ttk.LabelFrame(main_frame, text="マーカーの形状", padding=10)
-        marker_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        marker_section, marker_frame = theme.make_section(main_frame, "マーカーの形状")
+        marker_section.pack(fill=tk.X, expand=True, pady=(0, 10))
 
         marker_options = ["o", "s", "^", "v", "D", "p", "*", "x", "+"]
         num_columns = 4
@@ -554,10 +553,8 @@ S = Mr / Ms""",
                 data["marker_style_var"].trace_add("write", self.app._schedule_update)
 
         # --- 軸フォーマット設定フレーム ---
-        axis_format_frame = ttk.LabelFrame(
-            main_frame, text="軸の数値フォーマット", padding=10
-        )
-        axis_format_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        axis_format_section, axis_format_frame = theme.make_section(main_frame, "軸の数値フォーマット")
+        axis_format_section.pack(fill=tk.X, expand=True, pady=(0, 10))
         axis_format_frame.grid_columnconfigure(1, weight=1)
         axis_format_frame.grid_columnconfigure(3, weight=1)
 
@@ -600,7 +597,7 @@ S = Mr / Ms""",
         ttk.Label(
             axis_format_frame,
             text="例: %.2f (小数点以下2桁), %.0f (整数), %.1e (指数表記)",
-            font=("Arial", 9, "italic"),
+            font=theme.FONT_HINT,
             foreground="gray",
         ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(5, 0))
 
@@ -682,8 +679,8 @@ S = Mr / Ms""",
                 }
             )
 
-            frame = ttk.LabelFrame(scrollable_frame, text=file_path.name, padding=10)
-            frame.pack(fill=tk.X, expand=True, pady=5)
+            frame_section, frame = theme.make_section(scrollable_frame, file_path.name)
+            frame_section.pack(fill=tk.X, expand=True, pady=5)
             frame.grid_columnconfigure(1, weight=1)
             frame.grid_columnconfigure(3, weight=1)
 
