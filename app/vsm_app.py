@@ -98,6 +98,9 @@ class VSMApp:
         sv_ttk.set_theme("light")
         self.root.configure(bg=self.get_bg_color())
 
+        # --- ステータスバー（先にpackしてから main_frame をpackする必要がある）---
+        self._create_status_bar()
+
         # --- メインレイアウトの構築 ---
         main_frame = ttk.Frame(root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -206,6 +209,36 @@ class VSMApp:
         # --- ドラッグ＆ドロップの設定 ---
         self.root.drop_target_register(DND_FILES)
         self.root.dnd_bind("<<Drop>>", self.event_handlers.on_drop_files)
+
+    def _create_status_bar(self) -> None:
+        """ウィンドウ下部にステータスバーを作成する。"""
+        bar = ttk.Frame(self.root, relief="sunken", padding="3 2")
+        bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self._status_files_var = tk.StringVar(value="ファイル未読込")
+        self._status_time_var = tk.StringVar(value="")
+
+        ttk.Label(bar, textvariable=self._status_files_var, anchor="w").pack(
+            side=tk.LEFT, padx=(8, 0)
+        )
+        ttk.Separator(bar, orient="vertical").pack(
+            side=tk.LEFT, fill=tk.Y, padx=8, pady=2
+        )
+        ttk.Label(bar, textvariable=self._status_time_var, anchor="w").pack(
+            side=tk.LEFT
+        )
+
+    def update_status_bar(self) -> None:
+        """ステータスバーの表示を更新する。"""
+        from datetime import datetime
+
+        n = len(self.vsm_data)
+        self._status_files_var.set(
+            "ファイル未読込" if n == 0 else f"{n} ファイル読込済"
+        )
+        self._status_time_var.set(
+            f"最終更新: {datetime.now().strftime('%H:%M:%S')}" if n > 0 else ""
+        )
 
     def get_bg_color(self) -> str:
         """現在のテーマに応じた背景色を取得します。"""

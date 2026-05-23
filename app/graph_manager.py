@@ -248,6 +248,7 @@ class GraphManager:
             self.app.canvas.draw()
             self.app._update_demag_settings_ui()  # VSMAppのメソッド
             self.app._update_thickness_settings_ui()  # VSMAppのメソッド
+            self.app.update_status_bar()
             return
 
         output_stream = io.StringIO()
@@ -261,6 +262,7 @@ class GraphManager:
         self.app.info_button.config(
             state=tk.NORMAL if self.app.all_metadata else tk.DISABLED
         )
+        self.app.update_status_bar()
 
     def _process_and_plot(self, params: Dict[str, Any], unit_mode: str) -> None:
         """
