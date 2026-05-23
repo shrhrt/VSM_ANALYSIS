@@ -147,7 +147,7 @@ class VSMApp:
             font=theme.FONT_LOG,
             bg=theme.LOG_BG, fg=theme.LOG_FG_INFO,
             insertbackground="white",
-            selectbackground="#388bfd44",
+            selectbackground="#2a4a7a",
             borderwidth=0, highlightthickness=0,
             state=tk.DISABLED,
         )
