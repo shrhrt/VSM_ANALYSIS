@@ -363,7 +363,7 @@ class GraphManager:
 
                 # 現在のファイル用の解析結果辞書を作成
                 file_results = {
-                    "filename": file.stem,
+                    "filename": data["legend_name_var"].get(),
                     "Ms": None,
                     "Mr": None,
                     "Hc_Oe": None,

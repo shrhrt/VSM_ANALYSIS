@@ -6,3 +6,4 @@ tkinterdnd2
 sv-ttk
 pytest
 pyinstaller
+pywin32

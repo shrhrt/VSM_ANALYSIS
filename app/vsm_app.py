@@ -957,9 +957,9 @@ class VSMApp:
 
         # Insert new data
         for res in self.analysis_results:
-            ms_str = f"{res['Ms']:.3f}" if res["Ms"] is not None else "N/A"
-            mr_str = f"{res['Mr']:.3f}" if res["Mr"] is not None else "N/A"
-            hc_str = f"{res['Hc_Oe']:.2f}" if res["Hc_Oe"] is not None else "N/A"
+            ms_str = f"{res['Ms']:.1f}" if res["Ms"] is not None else "N/A"
+            mr_str = f"{res['Mr']:.1f}" if res["Mr"] is not None else "N/A"
+            hc_str = f"{res['Hc_Oe']:.1f}" if res["Hc_Oe"] is not None else "N/A"
             sq_str = (
                 f"{res['squareness']:.3f}" if res["squareness"] is not None else "N/A"
             )
@@ -1017,9 +1017,9 @@ class VSMApp:
             else:
                 # 選択された行がなければ、すべての行のデータをコピー
                 for res in self.analysis_results:
-                    ms_str = f"{res['Ms']:.3f}" if res["Ms"] is not None else ""
-                    mr_str = f"{res['Mr']:.3f}" if res["Mr"] is not None else ""
-                    hc_str = f"{res['Hc_Oe']:.2f}" if res["Hc_Oe"] is not None else ""
+                    ms_str = f"{res['Ms']:.1f}" if res["Ms"] is not None else ""
+                    mr_str = f"{res['Mr']:.1f}" if res["Mr"] is not None else ""
+                    hc_str = f"{res['Hc_Oe']:.1f}" if res["Hc_Oe"] is not None else ""
                     sq_str = (
                         f"{res['squareness']:.3f}"
                         if res["squareness"] is not None
@@ -1041,11 +1041,13 @@ class VSMApp:
             )
 
     def _copy_results_as_html(self) -> None:
-        """解析結果テーブルのデータをHTMLの表形式でクリップボードにコピーします。"""
+        """解析結果テーブルのデータをCF_HTML形式でクリップボードにコピーします（PowerPoint対応）。"""
         if not self.analysis_results:
             return
 
         try:
+            import win32clipboard
+
             headers = [
                 "ファイル名",
                 "飽和磁化 Ms (kA/m)",
@@ -1054,57 +1056,74 @@ class VSMApp:
                 "角形比 (S = Mr/Ms)",
             ]
 
-            # Start HTML table
-            html = '<table border="1" style="border-collapse:collapse; font-family: Arial, sans-serif;">'
-            # Header row
-            html += "<thead><tr style='background-color:#f2f2f2;'>"
-            for header in headers:
-                html += f'<th style="padding:8px; border:1px solid #dddddd; text-align:left;">{header}</th>'
-            html += "</tr></thead>"
-
-            # Data rows
-            html += "<tbody>"
+            # HTML テーブルを構築
+            table = '<table border="1" style="border-collapse:collapse; font-family: Arial, sans-serif;">'
+            table += "<thead><tr style='background-color:#f2f2f2;'>"
+            for h in headers:
+                table += f'<th style="padding:8px; border:1px solid #ddd; text-align:left;">{h}</th>'
+            table += "</tr></thead><tbody>"
 
             selected_items = self.results_tree.selection()
-            items_to_copy = []
-
             if selected_items:
-                # Get selected rows
-                for item_id in selected_items:
-                    items_to_copy.append(self.results_tree.item(item_id, "values"))
-                message_suffix = (
-                    "選択された行を表形式でクリップボードにコピーしました。"
-                )
+                items_to_copy = [self.results_tree.item(i, "values") for i in selected_items]
+                message_suffix = "選択された行を表形式でクリップボードにコピーしました。"
             else:
-                # Get all rows if none are selected
-                for child_id in self.results_tree.get_children():
-                    items_to_copy.append(self.results_tree.item(child_id, "values"))
-                message_suffix = (
-                    "すべての解析結果を表形式でクリップボードにコピーしました。"
-                )
+                items_to_copy = [self.results_tree.item(i, "values") for i in self.results_tree.get_children()]
+                message_suffix = "すべての解析結果を表形式でクリップボードにコピーしました。"
 
             for values in items_to_copy:
-                html += "<tr>"
+                table += "<tr>"
                 for value in values:
-                    # Align numbers to the right, text to the left
                     try:
                         float(value)
                         align = "right"
                     except (ValueError, TypeError):
                         align = "left"
-                    html += f'<td style="padding:8px; border:1px solid #dddddd; text-align:{align};">{value}</td>'
-                html += "</tr>"
+                    table += f'<td style="padding:8px; border:1px solid #ddd; text-align:{align};">{value}</td>'
+                table += "</tr>"
+            table += "</tbody></table>"
 
-            html += "</tbody></table>"
+            # CF_HTML 形式のヘッダーを計算して付加
+            frag_html = "<!--StartFragment-->" + table + "<!--EndFragment-->"
+            body = (
+                "<html>\r\n<head>\r\n"
+                '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">\r\n'
+                "</head>\r\n<body>\r\n"
+                + frag_html
+                + "\r\n</body>\r\n</html>"
+            )
+            hdr_template = (
+                "Version:0.9\r\n"
+                "StartHTML:{sh:08d}\r\nEndHTML:{eh:08d}\r\n"
+                "StartFragment:{sf:08d}\r\nEndFragment:{ef:08d}\r\n"
+            )
+            placeholder = hdr_template.format(sh=0, eh=0, sf=0, ef=0)
+            hdr_len = len(placeholder.encode("utf-8"))
+            sf = hdr_len + len(body[: body.find("<!--StartFragment-->") + len("<!--StartFragment-->")].encode("utf-8"))
+            ef = hdr_len + len(body[: body.find("<!--EndFragment-->")].encode("utf-8"))
+            eh = hdr_len + len(body.encode("utf-8"))
+            header = hdr_template.format(sh=hdr_len, eh=eh, sf=sf, ef=ef)
+            cf_html_bytes = (header + body).encode("utf-8")
 
-            self.root.clipboard_clear()
-            self.root.clipboard_append(html)
+            win32clipboard.OpenClipboard()
+            try:
+                win32clipboard.EmptyClipboard()
+                cf_fmt = win32clipboard.RegisterClipboardFormat("HTML Format")
+                win32clipboard.SetClipboardData(cf_fmt, cf_html_bytes)
+            finally:
+                win32clipboard.CloseClipboard()
 
             messagebox.showinfo("成功", message_suffix, parent=self.root)
 
+        except ImportError:
+            messagebox.showerror(
+                "エラー",
+                "pywin32がインストールされていません。\npip install pywin32 を実行してください。",
+                parent=self.root,
+            )
         except Exception as e:
             messagebox.showerror(
                 "エラー",
-                f"HTML形式でのコピー中にエラーが発生しました: {e}",
+                f"表形式コピー中にエラーが発生しました: {e}",
                 parent=self.root,
             )
