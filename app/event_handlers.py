@@ -399,7 +399,7 @@ S = Mr / Ms""",
                 "保存エラー", f"画像保存中にエラーが発生:\n{e}", parent=self.app.root
             )
         finally:
-            self.app.fig.set_size_inches(original_size)
+            self.app.fig.set_size_inches(original_size[0], original_size[1])
             self.app.canvas.draw_idle()
 
     def show_advanced_style_window(self) -> None:
@@ -453,7 +453,8 @@ S = Mr / Ms""",
             )
             entry = ttk.Entry(row, textvariable=data["legend_name_var"], width=50)
             entry.grid(row=0, column=1, sticky="ew")
-            data["legend_name_var"].trace_add("write", self.app._schedule_update)
+            if not any(t[0] == "write" for t in data["legend_name_var"].trace_info()):
+                data["legend_name_var"].trace_add("write", self.app._schedule_update)
 
         # --- ヒントを追加 ---
         hint_label = ttk.Label(
@@ -523,14 +524,6 @@ S = Mr / Ms""",
             legend_box_frame, textvariable=self.app.state.legend_columns_var, width=10
         ).grid(row=3, column=1, sticky="ew", padx=5, pady=2)
 
-        # トレースの追加
-        self.app.state.legend_location_var.trace_add("write", self.app._schedule_update)
-        self.app.state.legend_show_frame_var.trace_add(
-            "write", self.app._schedule_update
-        )
-        self.app.state.legend_alpha_var.trace_add("write", self.app._schedule_update)
-        self.app.state.legend_columns_var.trace_add("write", self.app._schedule_update)
-
         # --- マーカー設定フレーム ---
         marker_frame = ttk.LabelFrame(main_frame, text="マーカーの形状", padding=10)
         marker_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
@@ -557,7 +550,8 @@ S = Mr / Ms""",
                 width=5,
             )
             combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            data["marker_style_var"].trace_add("write", self.app._schedule_update)
+            if not any(t[0] == "write" for t in data["marker_style_var"].trace_info()):
+                data["marker_style_var"].trace_add("write", self.app._schedule_update)
 
         # --- 軸フォーマット設定フレーム ---
         axis_format_frame = ttk.LabelFrame(
@@ -609,13 +603,6 @@ S = Mr / Ms""",
             font=("Arial", 9, "italic"),
             foreground="gray",
         ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(5, 0))
-
-        # これらの変数も変更時にグラフを更新するようにトレースを追加
-        self.app.state.x_format_si_var.trace_add("write", self.app._schedule_update)
-        self.app.state.x_format_cgs_var.trace_add("write", self.app._schedule_update)
-        self.app.state.y_format_si_var.trace_add("write", self.app._schedule_update)
-        self.app.state.y_format_cgs_var.trace_add("write", self.app._schedule_update)
-        self.app.state.y_format_norm_var.trace_add("write", self.app._schedule_update)
 
         # --- ボタンフレーム ---
         button_frame = ttk.Frame(main_frame)
@@ -933,6 +920,7 @@ S = Mr / Ms""",
                     "path": str(data_path),  # 後方互換性用
                     "relative_path": rel_path,
                     "thickness": data["thickness_var"].get(),
+                    "area": data["area_var"].get(),
                     "marker_style": data["marker_style_var"].get(),
                     "legend_name": data["legend_name_var"].get(),
                     "color": self.app.file_color_vars[i].get(),
@@ -1012,6 +1000,9 @@ S = Mr / Ms""",
                 new_data = {"path": path, "df": df}
                 new_data["thickness_var"] = tk.StringVar(
                     value=file_data.get("thickness", "30.0")
+                )
+                new_data["area_var"] = tk.StringVar(
+                    value=file_data.get("area", "90")
                 )
                 new_data["marker_style_var"] = tk.StringVar(
                     value=file_data.get("marker_style", "o")

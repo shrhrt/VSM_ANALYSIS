@@ -69,7 +69,8 @@ class VSMApp:
 
         self.root: TkinterDnD.Tk = root
         self.root.title("VSM Data Analyzer")
-        self.root.geometry("1920x1800")  # Full screen
+        self.root.minsize(1100, 700)
+        self.root.state('zoomed')
 
         self.style = ttk.Style(self.root)
         # モダンテーマ「sv_ttk」を適用（デフォルトはライトテーマ）
@@ -390,16 +391,18 @@ class VSMApp:
 
     def _create_export_controls(self, parent: ttk.Frame) -> None:
         """
-        保存タブ内のコントロール（画像サイズ、DPI、保存ボタンなど）を作成します。
+        保存タブ内のコントロール（画像サイズ、DPI、保存ボタンなど）を作成。
 
         Args:
             parent (ttk.Frame): コントロールを配置する親フレーム。
         """
+        # --- 1. 画像サイズ設定フレームの構築 ---
         save_settings_frame = ttk.LabelFrame(
             parent, text=" 画像サイズ設定 ", padding="10"
         )
         save_settings_frame.pack(fill=tk.X, pady=(0, 10))
         save_settings_frame.grid_columnconfigure(1, weight=1)
+
         ttk.Label(save_settings_frame, text="幅:").grid(
             row=0, column=0, sticky="w", pady=3
         )
@@ -407,6 +410,7 @@ class VSMApp:
             save_settings_frame, textvariable=self.state.save_width_var, width=10
         ).grid(row=0, column=1, sticky="ew", padx=5, pady=3)
         ttk.Label(save_settings_frame, text="inch").grid(row=0, column=2, sticky="w")
+
         ttk.Label(save_settings_frame, text="高さ:").grid(
             row=1, column=0, sticky="w", pady=3
         )
@@ -414,18 +418,25 @@ class VSMApp:
             save_settings_frame, textvariable=self.state.save_height_var, width=10
         ).grid(row=1, column=1, sticky="ew", padx=5, pady=3)
         ttk.Label(save_settings_frame, text="inch").grid(row=1, column=2, sticky="w")
+
+        # --- 2. 解像度(DPI)設定フレームの構築 ---
         dpi_frame = ttk.LabelFrame(parent, text=" 解像度設定 ", padding="10")
         dpi_frame.pack(fill=tk.X, pady=(0, 10))
         dpi_frame.grid_columnconfigure(1, weight=1)
+        # DPIのラベルを左端に配置。
         ttk.Label(dpi_frame, text="DPI:").grid(row=0, column=0, sticky="w", pady=3)
         ttk.Entry(dpi_frame, textvariable=self.state.save_dpi_var, width=10).grid(
             row=0, column=1, sticky="ew", padx=5, pady=3
         )
+
+        # --- 3. 保存ボタンフレームの構築 ---
         save_button_frame = ttk.Frame(parent, padding="10 10 10 0")
         save_button_frame.pack(fill=tk.BOTH, expand=True)
+
+        # style="Accent.TButton" により、テーマのアクセントカラーを適用。
         ttk.Button(
             save_button_frame,
-            text="画像を保存 (Save Image)",
+            text="画像を保存",
             command=self.event_handlers.save_figure,
             padding="10",
             style="Accent.TButton",
@@ -464,12 +475,16 @@ class VSMApp:
             var.trace_add("write", self._schedule_update)
 
     def _update_file_list_ui(self) -> None:
-        """ファイルリストのUI（描画順の変更、色の選択、削除）を再構築します。"""
-        # Clear existing widgets
+        """
+        ファイルリストのUI（描画順の変更、色の選択、削除）を再構築。
+        状態の不整合を防ぐため、一度すべてのウィジェットを破棄してから、
+        現在の vsm_data の状態に合わせてゼロから生成し直すアプローチ。
+        """
+        # 既存のウィジェット（各行のフレーム等）をすべて破棄。
         for widget in self.individual_color_frame.winfo_children():
             widget.destroy()
 
-        # Re-create widgets for each file
+        # 現在保持しているファイルデータごとにUIの行（row_frame）を作成
         for i, data in enumerate(self.vsm_data):
             row_frame = ttk.Frame(self.individual_color_frame)
             row_frame.pack(fill=tk.X, pady=2)
@@ -477,7 +492,8 @@ class VSMApp:
             filename = data["path"].name
             color_var = self.file_color_vars[i]
 
-            # Up/Down buttons
+            # --- 上移動ボタン ---
+            # lambda内の idx=i は、ループ変数の遅延評価（すべてのボタンが最後のインデックスを参照してしまうバグ）を防ぐための必須の記述である。
             up_button = ttk.Button(
                 row_frame,
                 text="↑",
@@ -485,9 +501,11 @@ class VSMApp:
                 command=lambda idx=i: self.event_handlers.move_file_up(idx),
             )
             up_button.pack(side=tk.LEFT, padx=(0, 2))
+            # 一番上の要素の場合は上移動ボタンを無効化する。
             if i == 0:
                 up_button.config(state=tk.DISABLED)
 
+            # --- 下移動ボタン ---
             down_button = ttk.Button(
                 row_frame,
                 text="↓",
@@ -495,10 +513,11 @@ class VSMApp:
                 command=lambda idx=i: self.event_handlers.move_file_down(idx),
             )
             down_button.pack(side=tk.LEFT, padx=(0, 5))
+            # 一番下の要素の場合は下移動ボタンを無効化する。
             if i == len(self.vsm_data) - 1:
                 down_button.config(state=tk.DISABLED)
 
-            # Delete button
+            # --- 削除ボタン ---
             ttk.Button(
                 row_frame,
                 text="✕",
@@ -506,15 +525,24 @@ class VSMApp:
                 command=lambda idx=i: self.event_handlers.remove_file(idx),
             ).pack(side=tk.LEFT, padx=(0, 5))
 
-            # File label
+            # --- ファイル名ラベル ---
+            # ファイル名が長すぎる場合はUIが崩れるため、25文字で切り詰めて「..」を付与する。
             display_name = (filename[:25] + "..") if len(filename) > 27 else filename
             ttk.Label(row_frame, text=display_name).pack(
                 side=tk.LEFT, fill=tk.X, expand=True
             )
 
-            # Color preview and button
+            # --- 色プレビューと色選択ボタン ---
+            # ttk.Label はテーマによって背景色の変更が難しいため、標準の tk.Label を用いて色付きの四角形を作る。
             preview = tk.Label(row_frame, text="", bg=color_var.get(), width=4)
             preview.pack(side=tk.RIGHT, padx=5)
+
+            # 変数に紐づく古いトレース（監視イベント）が残っていると多重登録されメモリリークの原因になるため、事前にすべて削除する。
+            for trace in color_var.trace_info():
+                if trace[0] == "write":
+                    color_var.trace_remove("write", trace[1])
+
+            # 色変数が変更されたら、プレビューの背景色を更新し、グラフの再描画をスケジュールする。
             color_var.trace_add(
                 "write",
                 lambda *args, p=preview, cv=color_var: (
@@ -522,6 +550,7 @@ class VSMApp:
                     self._schedule_update(),
                 ),
             )
+            # カラーピッカーを開くボタン。
             ttk.Button(
                 row_frame,
                 text="色選択",
@@ -530,10 +559,15 @@ class VSMApp:
             ).pack(side=tk.RIGHT)
 
     def _schedule_update(self, *args: Any) -> None:
-        """グラフの更新処理を少し遅延させてスケジュールします。連続した変更による負荷を軽減します。"""
+        """
+        グラフの更新処理を少し遅延させてスケジュール。
+        連続した入力による負荷を軽減するための処理。
+        """
+        # すでに更新の予約（ジョブ）が存在する場合は、それをキャンセル。
         if self._update_job:
             self.root.after_cancel(self._update_job)
-        self._update_job = self.root.after(250, self.graph_manager.update_graph)
+        # 新たに500ミリ秒後にグラフ更新処理を実行するよう予約し、そのジョブIDを保存す。
+        self._update_job = self.root.after(500, self.graph_manager.update_graph)
 
     def log_message(self, message: str) -> None:
         """
