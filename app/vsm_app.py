@@ -14,6 +14,7 @@ import app.analysis_tab as analysis_tab
 import app.event_handlers as event_handlers
 import app.graph_manager as graph_manager
 import app.state_manager as state_manager
+from analysis.tex_utils import tex_to_display
 
 
 # -----------------------------------------------------------------------------
@@ -964,7 +965,7 @@ class VSMApp:
                 f"{res['squareness']:.3f}" if res["squareness"] is not None else "N/A"
             )
             self.results_tree.insert(
-                "", "end", values=(res["filename"], ms_str, mr_str, hc_str, sq_str)
+                "", "end", values=(tex_to_display(res["filename"]), ms_str, mr_str, hc_str, sq_str)
             )
 
     def _sort_column(self, col: str) -> None:
@@ -1025,7 +1026,7 @@ class VSMApp:
                         if res["squareness"] is not None
                         else ""
                     )
-                    row = [res["filename"], ms_str, mr_str, hc_str, sq_str]
+                    row = [tex_to_display(res["filename"]), ms_str, mr_str, hc_str, sq_str]
                     tsv_data_lines.append("\t".join(row))
                 message_suffix = "すべての解析結果をクリップボードにコピーしました。"
 
