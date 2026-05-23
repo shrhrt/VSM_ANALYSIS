@@ -913,9 +913,23 @@ S = Mr / Ms""",
                 except ValueError:
                     rel_path = str(data_path)
 
+                # OneDrive相対パスを計算（別PCでの復元用）
+                onedrive_rel = None
+                for env_key in ("OneDriveCommercial", "OneDrive"):
+                    od_root = os.environ.get(env_key, "")
+                    if od_root:
+                        try:
+                            candidate = os.path.relpath(str(data_path), od_root)
+                            if not candidate.startswith(".."):
+                                onedrive_rel = candidate
+                                break
+                        except ValueError:
+                            continue
+
                 file_data = {
                     "path": str(data_path),  # 後方互換性用
                     "relative_path": rel_path,
+                    "onedrive_relative_path": onedrive_rel,
                     "thickness": data["thickness_var"].get(),
                     "area": data["area_var"].get(),
                     "marker_style": data["marker_style_var"].get(),
@@ -964,33 +978,40 @@ S = Mr / Ms""",
             self.app.vsm_data = []
             self.app.file_color_vars = []
 
+            missing_files = []
             for file_data in session_data.get("file_specific_data", []):
                 rel_path_str = file_data.get("relative_path")
                 abs_path_str = file_data.get("path")
+                od_rel_str = file_data.get("onedrive_relative_path")
                 path = None
 
-                # 1. 相対パスで探す
+                # 1. 相対パスで探す（セッションファイルと同じPCで使う場合）
                 if rel_path_str:
                     target_path = (session_dir / rel_path_str).resolve()
                     if target_path.exists():
                         path = target_path
-                # 2. 絶対パスで探す（同じPCでの読み込みや、古いセッションファイル用）
+                # 2. 絶対パスで探す（同じPCでの読み込みや古いセッションファイル用）
                 if not path and abs_path_str:
                     target_path = Path(abs_path_str)
                     if target_path.exists():
                         path = target_path
-                # 3. 同じフォルダ内を探す（とりあえず一緒にまとめた場合用）
+                # 3. 同じフォルダ内を探す（ファイルをまとめて移動した場合用）
                 if not path and abs_path_str:
                     target_path = session_dir / Path(abs_path_str).name
                     if target_path.exists():
                         path = target_path
+                # 4. OneDriveルート＋相対パスで探す（別PCで同期している場合用）
+                if not path and od_rel_str:
+                    for env_key in ("OneDriveCommercial", "OneDrive"):
+                        od_root = os.environ.get(env_key, "")
+                        if od_root:
+                            candidate = Path(od_root) / od_rel_str
+                            if candidate.exists():
+                                path = candidate
+                                break
 
                 if not path:
-                    messagebox.showwarning(
-                        "ファイル欠落",
-                        f"ファイルが見つかりません:\n{abs_path_str or rel_path_str}\nスキップします。",
-                        parent=self.app.root,
-                    )
+                    missing_files.append(abs_path_str or rel_path_str or "(不明)")
                     continue
 
                 df, _ = file_io.load_vsm_file(path)
@@ -1012,6 +1033,14 @@ S = Mr / Ms""",
                 self.app.vsm_data.append(new_data)
                 self.app.file_color_vars.append(
                     tk.StringVar(value=file_data.get("color", "#000000"))
+                )
+
+            if missing_files:
+                file_list = "\n".join(f"  • {p}" for p in missing_files)
+                messagebox.showwarning(
+                    "ファイル欠落",
+                    f"以下のファイルが見つからなかったためスキップしました:\n\n{file_list}",
+                    parent=self.app.root,
                 )
 
             # UIを更新してグラフを再描画
