@@ -92,6 +92,37 @@ def make_section(parent: tk.Widget, text: str, padding: int = SECTION_PADDING) -
     return outer, content
 
 
+LOG_BG          = "#0d1117"   # ターミナル背景（GitHub Dark）
+LOG_FG_INFO     = "#c9d1d9"   # 通常テキスト
+LOG_FG_SUCCESS  = "#3fb950"   # 成功（明るい緑）
+LOG_FG_ERROR    = "#f85149"   # エラー（明るい赤）
+LOG_FG_TS       = "#6e7681"   # タイムスタンプ（暗いグレー）
+
+
+def accent_button(parent: tk.Widget, **kwargs) -> tk.Button:
+    """緑のプライマリボタン。ttk では sv_ttk が色を上書きするため tk.Button を使用。"""
+    kw = dict(
+        bg=ACCENT_COLOR, fg="white",
+        activebackground=ACCENT_DARK, activeforeground="white",
+        relief="flat", font=FONT_BODY, cursor="hand2",
+        padx=12, pady=6, borderwidth=0,
+    )
+    kw.update(kwargs)
+    return tk.Button(parent, **kw)
+
+
+def danger_button(parent: tk.Widget, **kwargs) -> tk.Button:
+    """赤の危険操作ボタン。"""
+    kw = dict(
+        bg=DANGER_COLOR, fg="white",
+        activebackground=DANGER_DARK, activeforeground="white",
+        relief="flat", font=FONT_BODY, cursor="hand2",
+        padx=12, pady=6, borderwidth=0,
+    )
+    kw.update(kwargs)
+    return tk.Button(parent, **kw)
+
+
 def setup_treeview_tags(tree: ttk.Treeview) -> None:
     """Treeview に交互行カラー（zebra striping）のタグを設定する。"""
     tree.tag_configure("oddrow",  background="#ffffff")

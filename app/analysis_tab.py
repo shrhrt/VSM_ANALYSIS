@@ -34,12 +34,10 @@ class AnalysisTab:
         # --- ファイル操作フレーム ---
         file_section, file_frame = theme.make_section(parent, "ファイル")
         file_section.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(
+        theme.accent_button(
             file_frame,
             text="ファイルを選択 (新規)",
             command=self.app.event_handlers.load_files,
-            padding="10 5",
-            style="Accent.TButton",
         ).pack(fill=tk.X)
         ttk.Button(
             file_frame,
@@ -47,12 +45,10 @@ class AnalysisTab:
             command=self.app.event_handlers.add_files,
             padding="10 5",
         ).pack(fill=tk.X, pady=(5, 0))
-        ttk.Button(
+        theme.danger_button(
             file_frame,
             text="ファイルを全て削除",
             command=self.app.event_handlers.clear_all_files,
-            padding="10 5",
-            style="Danger.TButton",
         ).pack(fill=tk.X, pady=(5, 0))
         self.info_button = ttk.Button(
             file_frame,

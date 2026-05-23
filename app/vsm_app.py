@@ -137,21 +137,30 @@ class VSMApp:
         # --- ログタブ: ツールバー＋テキストエリア ---
         log_toolbar = ttk.Frame(log_tab)
         log_toolbar.pack(fill=tk.X, pady=(0, 4))
-        ttk.Button(
+        theme.danger_button(
             log_toolbar, text="ログをクリア", command=self._clear_log,
-            style="Danger.TButton", padding="6 3",
+            padx=8, pady=3,
         ).pack(side=tk.RIGHT)
 
         self.log_text = scrolledtext.ScrolledText(
-            log_tab, wrap=tk.WORD, font=theme.FONT_LOG, state=tk.DISABLED
+            log_tab, wrap=tk.WORD,
+            font=theme.FONT_LOG,
+            bg=theme.LOG_BG, fg=theme.LOG_FG_INFO,
+            insertbackground="white",
+            selectbackground="#388bfd44",
+            borderwidth=0, highlightthickness=0,
+            state=tk.DISABLED,
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
-        self.log_text.tag_configure("log_ts",      foreground="#888888")
-        self.log_text.tag_configure("log_info",    foreground="#333333")
-        self.log_text.tag_configure("log_success", foreground=theme.ACCENT_COLOR)
+        self.log_text.tag_configure("log_ts",      foreground=theme.LOG_FG_TS)
+        self.log_text.tag_configure("log_info",    foreground=theme.LOG_FG_INFO)
         self.log_text.tag_configure(
-            "log_error", foreground=theme.DANGER_COLOR,
+            "log_success", foreground=theme.LOG_FG_SUCCESS,
+            font=(theme.FONT_FAMILY, 10, "bold"),
+        )
+        self.log_text.tag_configure(
+            "log_error", foreground=theme.LOG_FG_ERROR,
             font=(theme.FONT_FAMILY, 10, "bold"),
         )
 
@@ -507,13 +516,10 @@ class VSMApp:
         save_button_frame = ttk.Frame(parent, padding="10 10 10 0")
         save_button_frame.pack(fill=tk.BOTH, expand=True)
 
-        # style="Accent.TButton" により、テーマのアクセントカラーを適用。
-        ttk.Button(
+        theme.accent_button(
             save_button_frame,
             text="画像を保存",
             command=self.event_handlers.save_figure,
-            padding="10",
-            style="Accent.TButton",
         ).pack(fill=tk.X, expand=True, side=tk.BOTTOM)
 
     def _add_traces(self) -> None:
@@ -592,12 +598,12 @@ class VSMApp:
                 down_button.config(state=tk.DISABLED)
 
             # --- 削除ボタン ---
-            ttk.Button(
+            theme.danger_button(
                 row_frame,
                 text="✕",
                 width=3,
                 command=lambda idx=i: self.event_handlers.remove_file(idx),
-                style="Danger.TButton",
+                padx=4, pady=2,
             ).pack(side=tk.LEFT, padx=(0, 5))
 
             # --- ファイル名ラベル ---
@@ -868,12 +874,12 @@ class VSMApp:
             entry_a.grid(row=0, column=5, sticky="e", padx=(2, 0))
             ttk.Label(frame, text="mm²").grid(row=0, column=6, sticky="w", padx=(2, 0))
 
-            ttk.Button(
+            theme.danger_button(
                 frame,
                 text="✕",
                 width=3,
                 command=lambda idx=i: self.event_handlers.remove_file(idx),
-                style="Danger.TButton",
+                padx=4, pady=2,
             ).grid(row=0, column=7, sticky="w", padx=(10, 0))
 
             thickness_var.trace_add(

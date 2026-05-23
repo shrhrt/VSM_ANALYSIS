@@ -214,10 +214,7 @@ S = Mr / Ms""",
         listbox.selection_set(0)
         update_text()
 
-        close_btn = ttk.Button(
-            win, text="閉じる", command=win.destroy, style="Accent.TButton"
-        )
-        close_btn.pack(pady=(0, 10))
+        theme.accent_button(win, text="閉じる", command=win.destroy).pack(pady=(0, 10))
 
     def on_drop_files(self, event: Any) -> None:
         """
@@ -609,10 +606,7 @@ S = Mr / Ms""",
             self.app.graph_manager.update_graph()
             win.destroy()
 
-        ok_button = ttk.Button(
-            button_frame, text="OK", command=on_ok, style="Accent.TButton"
-        )
-        ok_button.pack()
+        theme.accent_button(button_frame, text="OK", command=on_ok).pack()
 
     def show_ms_settings_window(self) -> None:
         """飽和磁化 (Ms) を計算するための磁場範囲を手動設定するウィンドウを表示します。"""
@@ -783,11 +777,8 @@ S = Mr / Ms""",
         ttk.Button(
             button_frame, text="キャンセル", command=settings_window.destroy
         ).grid(row=0, column=0, sticky="ew", padx=(0, 5))
-        ttk.Button(
-            button_frame,
-            text="OK & 保存",
-            command=save_settings,
-            style="Accent.TButton",
+        theme.accent_button(
+            button_frame, text="OK & 保存", command=save_settings,
         ).grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
     def move_file_up(self, index: int) -> None:
