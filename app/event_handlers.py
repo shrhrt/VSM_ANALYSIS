@@ -390,12 +390,12 @@ S = Mr / Ms""",
             )
             self.app.fig.set_size_inches(w, h)
             self.app.fig.savefig(file_path, dpi=dpi, bbox_inches="tight")
-            self.app.log_message("保存が完了しました。\n")
+            self.app.log_message("保存が完了しました。\n", level="success")
             messagebox.showinfo(
                 "成功", f"画像を保存しました:\n{file_path}", parent=self.app.root
             )
         except Exception as e:
-            self.app.log_message(f"エラー: 画像保存失敗 - {e}\n")
+            self.app.log_message(f"エラー: 画像保存失敗 - {e}\n", level="error")
             messagebox.showerror(
                 "保存エラー", f"画像保存中にエラーが発生:\n{e}", parent=self.app.root
             )

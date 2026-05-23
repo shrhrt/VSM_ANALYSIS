@@ -257,7 +257,7 @@ class GraphManager:
             self._process_and_plot(params, unit_mode)
 
         self.app.log_message(output_stream.getvalue())
-        self.app.log_message("\n描画完了。\n")
+        self.app.log_message("\n描画完了。\n", level="success")
         self.app.canvas.draw()
         self.app.info_button.config(
             state=tk.NORMAL if self.app.all_metadata else tk.DISABLED

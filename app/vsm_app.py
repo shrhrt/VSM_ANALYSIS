@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import platform
+from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 from typing import Any, Dict, List, Optional
@@ -133,11 +134,26 @@ class VSMApp:
         self.main_notebook.add(tab_export, text="保存")
         self.main_notebook.add(log_tab, text="ログ")
 
-        # --- ログテキストウィジェット ---
+        # --- ログタブ: ツールバー＋テキストエリア ---
+        log_toolbar = ttk.Frame(log_tab)
+        log_toolbar.pack(fill=tk.X, pady=(0, 4))
+        ttk.Button(
+            log_toolbar, text="ログをクリア", command=self._clear_log,
+            style="Danger.TButton", padding="6 3",
+        ).pack(side=tk.RIGHT)
+
         self.log_text = scrolledtext.ScrolledText(
-            log_tab, wrap=tk.WORD, font=theme.FONT_LOG
+            log_tab, wrap=tk.WORD, font=theme.FONT_LOG, state=tk.DISABLED
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
+
+        self.log_text.tag_configure("log_ts",      foreground="#888888")
+        self.log_text.tag_configure("log_info",    foreground="#333333")
+        self.log_text.tag_configure("log_success", foreground=theme.ACCENT_COLOR)
+        self.log_text.tag_configure(
+            "log_error", foreground=theme.DANGER_COLOR,
+            font=(theme.FONT_FAMILY, 10, "bold"),
+        )
 
         # --- 右ペイン (グラフ表示領域) --- ※左、右の順にaddされる
         graph_frame = ttk.Frame(main_paned_window, padding=5)
@@ -232,8 +248,6 @@ class VSMApp:
 
     def update_status_bar(self) -> None:
         """ステータスバーの表示を更新する。"""
-        from datetime import datetime
-
         n = len(self.vsm_data)
         self._status_files_var.set(
             "ファイル未読込" if n == 0 else f"{n} ファイル読込済"
@@ -630,14 +644,28 @@ class VSMApp:
         # 新たに500ミリ秒後にグラフ更新処理を実行するよう予約し、そのジョブIDを保存す。
         self._update_job = self.root.after(500, self.graph_manager.update_graph)
 
-    def log_message(self, message: str) -> None:
-        """
-        ログタブのテキストエリアにメッセージを追記します。
+    def _clear_log(self) -> None:
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.config(state=tk.DISABLED)
 
-        Args:
-            message (str): 追記するメッセージ文字列。
-        """
-        self.log_text.insert(tk.END, message)
+    def log_message(self, message: str, level: str = "info") -> None:
+        """ログタブにタイムスタンプ＋色付きでメッセージを追記する。level: info / success / error"""
+        tag = f"log_{level}" if level in ("info", "success", "error") else "log_info"
+        labels = {"info": "INFO   ", "success": "SUCCESS", "error": "ERROR  "}
+        label = labels.get(level, "INFO   ")
+        ts = datetime.now().strftime("%H:%M:%S")
+
+        self.log_text.config(state=tk.NORMAL)
+        for line in message.splitlines(keepends=True):
+            stripped = line.rstrip("\n")
+            if stripped:
+                self.log_text.insert(tk.END, f"[{ts}] ", "log_ts")
+                self.log_text.insert(tk.END, f"{label}  ", tag)
+                self.log_text.insert(tk.END, f"{stripped}\n", tag)
+            else:
+                self.log_text.insert(tk.END, "\n")
+        self.log_text.config(state=tk.DISABLED)
         self.log_text.see(tk.END)
         self.root.update_idletasks()
 

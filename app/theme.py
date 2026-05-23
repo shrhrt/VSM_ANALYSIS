@@ -18,9 +18,9 @@ FONT_HEADING = (FONT_FAMILY, 10, "bold")
 FONT_HINT    = (FONT_FAMILY, 9, "italic")
 FONT_LOG     = ("Consolas", 10)
 
-ACCENT_COLOR  = "#3D5A99"   # Indigo
-ACCENT_DARK   = "#2E4A80"   # Indigo (hover)
-ACCENT_LIGHT  = "#EEF1F8"   # 薄いインディゴ（Treeview 偶数行など）
+ACCENT_COLOR  = "#00704A"   # Starbucks Emerald Green
+ACCENT_DARK   = "#005A3C"   # Dark Green (hover)
+ACCENT_LIGHT  = "#E8F5EF"   # Pale Green（Treeview 偶数行など）
 DANGER_COLOR  = "#DC2626"   # Red
 DANGER_DARK   = "#B91C1C"   # Red (hover)
 SECTION_PADDING = 10
