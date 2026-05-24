@@ -155,51 +155,52 @@ main.py
 
 ## クイックスタート
 
-> Python環境の構築は不要です。最短3ステップで解析を開始できます。
+> **動作環境: Windows 10/11**（`pywin32` への依存によりWindows専用）
 
 **ステップ 1 — ダウンロード**
 
-GitHubの [Releases ページ](https://github.com/shrhrt/VSM_ANALYSIS/releases/tag/v1.0) から最新の `VSM_Analyzer_vX.X.zip` をダウンロード。
+GitHubの [Releases ページ](https://github.com/shrhrt/VSM_ANALYSIS/releases) から最新の ZIP をダウンロード。
 
 **ステップ 2 — 起動**
 
-ZIPを解凍し、`VSM_Analyzer.exe` をダブルクリック。
+ZIP を解凍し、`VSM_Analyzer.exe` をダブルクリック。
 
 > **SmartScreen警告が表示された場合**
-> Windowsの保護機能による表示です。「詳細情報」をクリックし、右下に現れる「実行」を選択してください。
+> 「詳細情報」→「実行」の順に選択。
 
 **ステップ 3 — データ読み込み**
 
-`.VSM` ファイルをウィンドウにドラッグ＆ドロップするとグラフが即座に描画されます。
+`.VSM` ファイルをウィンドウにドラッグ＆ドロップするとグラフが描画される。
 
 ---
 
 ## 開発者向けセットアップ
 
-**前提条件**: [Python 3.11 以上](https://www.python.org/downloads/) がインストール済みであること。
+**動作環境**: Windows 10/11、[Python 3.11+](https://www.python.org/downloads/)
 
-```bash
-# 1. リポジトリのクローン
+```bat
+:: リポジトリのクローン
 git clone https://github.com/shrhrt/VSM_ANALYSIS.git
 cd VSM_Analysis
 
-# 2. 仮想環境の作成と有効化
+:: 仮想環境の作成・有効化
 python -m venv env
-env\Scripts\activate        # Windows
-# source env/bin/activate   # macOS / Linux
+env\Scripts\activate
 
-# 3. 依存ライブラリのインストール
+:: 依存ライブラリのインストール
 pip install -r requirements.txt
 
-# 4. 起動
+:: 起動
 python main.py
 ```
 
-**実行ファイルのビルド（PyInstaller）**
+**実行ファイルのビルド**
 
-```bash
+```bat
 pyinstaller main.spec
 ```
+
+ビルド成功後、`dist\VSM_Analyzer.exe` が生成される。
 
 ## テストの実行
 
