@@ -175,7 +175,11 @@ class GraphManager:
         UIの状態を読み取り、それに基づいてグラフを再描画します。
         ファイルが選択されていない場合はクリアします。
         """
-        self.app.log_text.delete(1.0, tk.END)
+        # 直接呼び出し時にスケジュール済みの予約をキャンセルして二重実行を防ぐ
+        if self.app._update_job:
+            self.app.root.after_cancel(self.app._update_job)
+            self.app._update_job = None
+
         self.app.ax.clear()
         self.app.all_metadata = {}
 

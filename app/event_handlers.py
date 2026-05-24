@@ -244,11 +244,13 @@ S = Mr / Ms""",
         else:
             start_idx = len(self.app.vsm_data)
 
+        loaded_names = []
         for i, file_path in enumerate(files):
             df, error_message = file_io.load_vsm_file(file_path)
 
             if error_message:
                 messagebox.showerror("読込エラー", error_message, parent=self.app.root)
+                self.app.log_message(f"読込失敗: {Path(file_path).name} — {error_message}", level="error")
                 continue
 
             path = Path(file_path)
@@ -260,11 +262,17 @@ S = Mr / Ms""",
                 "legend_name_var": tk.StringVar(value=path.stem),
             }
             self.app.vsm_data.append(file_data)
+            loaded_names.append(path.name)
 
             # 色を順番に割り当て
             color_idx = (start_idx + i) % len(self.app.base_colors)
             color_var = tk.StringVar(value=self.app.base_colors[color_idx])
             self.app.file_color_vars.append(color_var)
+
+        if loaded_names:
+            mode = "追加" if append else "読込"
+            names_str = "\n".join(f"  {n}" for n in loaded_names)
+            self.app.log_message(f"ファイル{mode} ({len(loaded_names)}件):\n{names_str}")
 
         self.app.info_button.config(
             state=tk.NORMAL if self.app.vsm_data else tk.DISABLED
@@ -337,6 +345,7 @@ S = Mr / Ms""",
 
             del self.app.vsm_data[index]
             del self.app.file_color_vars[index]
+            self.app.log_message(f"ファイル削除: {filename}", level="error")
 
             self.app.info_button.config(
                 state=tk.NORMAL if self.app.vsm_data else tk.DISABLED
@@ -934,6 +943,7 @@ S = Mr / Ms""",
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(session_data, f, indent=4, ensure_ascii=False)
 
+            self.app.log_message(f"セッション保存: {session_file_path.name}", level="success")
             messagebox.showinfo(
                 "成功", "セッションを保存しました。", parent=self.app.root
             )
@@ -1038,6 +1048,10 @@ S = Mr / Ms""",
             self.app._update_file_list_ui()
             self.app._update_demag_settings_ui()
             self.app._update_thickness_settings_ui()
+            n = len(self.app.vsm_data)
+            self.app.log_message(
+                f"セッション読込: {session_file_path.name}  ({n}件のファイル)", level="success"
+            )
             self.app.graph_manager.update_graph()
 
         except Exception as e:

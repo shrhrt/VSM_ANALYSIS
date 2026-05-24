@@ -652,17 +652,18 @@ class VSMApp:
     def log_message(self, message: str, level: str = "info") -> None:
         """ログタブにタイムスタンプ＋色付きでメッセージを追記する。level: info / success / error"""
         tag = f"log_{level}" if level in ("info", "success", "error") else "log_info"
-        labels = {"info": "INFO   ", "success": "SUCCESS", "error": "ERROR  "}
-        label = labels.get(level, "INFO   ")
+        # INFO はラベルなし、SUCCESS/ERROR は記号付き
+        prefix = {"success": " ✓", "error": " ✗"}.get(level, "")
         ts = datetime.now().strftime("%H:%M:%S")
 
         self.log_text.config(state=tk.NORMAL)
         for line in message.splitlines(keepends=True):
             stripped = line.rstrip("\n")
             if stripped:
-                self.log_text.insert(tk.END, f"[{ts}] ", "log_ts")
-                self.log_text.insert(tk.END, f"{label}  ", tag)
-                self.log_text.insert(tk.END, f"{stripped}\n", tag)
+                self.log_text.insert(tk.END, f"[{ts}]", "log_ts")
+                if prefix:
+                    self.log_text.insert(tk.END, prefix, tag)
+                self.log_text.insert(tk.END, f"  {stripped}\n", tag)
             else:
                 self.log_text.insert(tk.END, "\n")
         self.log_text.config(state=tk.DISABLED)
