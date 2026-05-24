@@ -3,7 +3,8 @@
   <p>磁性材料の磁気特性測定データ（VSM / PPMS）を解析・可視化するデスクトップGUIアプリケーション</p>
   <img src="https://img.shields.io/badge/Python-3.11+-blue?logo=python" alt="Python">
   <img src="https://img.shields.io/badge/Platform-Windows-lightgrey?logo=windows" alt="Platform">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/GUI-Tkinter%20%2F%20sv--ttk-green" alt="GUI">
+  <img src="https://img.shields.io/badge/Plot-Matplotlib-orange" alt="Matplotlib">
 </div>
 
 ## 目次
