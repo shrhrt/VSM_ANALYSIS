@@ -190,7 +190,6 @@ def calculate_saturation_magnetization(
 
     if pos_range and neg_range:
         # Manual range calculation
-        print("    Ms計算: 手動範囲を使用")
         pos_mask = (H >= pos_range[0]) & (H <= pos_range[1])
         neg_mask = (H >= neg_range[0]) & (H <= neg_range[1])
 
@@ -215,7 +214,6 @@ def calculate_saturation_magnetization(
 
     else:
         # Automatic range calculation
-        print("    Ms計算: 自動範囲を使用")
         H_max, H_min = np.max(H), np.min(H)
         pos_mask = H > H_max * 0.9
         neg_mask = H < H_min * 0.9

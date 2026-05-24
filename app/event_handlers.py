@@ -509,7 +509,7 @@ S = Mr / Ms""",
         # --- ヒントを追加 ---
         hint_label = ttk.Label(
             scrollable_frame,
-            text="ヒント: 下付き文字やギリシャ文字(γ)は TeX 形式で入力できます (例: $H_2O$, $\gamma$)",
+            text=r"ヒント: 下付き文字やギリシャ文字(γ)は TeX 形式で入力できます (例: $H_2O$, $\gamma$)",
             font=theme.FONT_HINT,
             foreground="gray",
         )
