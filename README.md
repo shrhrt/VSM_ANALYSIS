@@ -18,11 +18,13 @@
   - [2. データ補正と物理量算出](#2-データ補正と物理量算出)
   - [3. インタラクティブなグラフ描画](#3-インタラクティブなグラフ描画)
   - [4. データ管理と出力](#4-データ管理と出力)
-- [主な使用技術](#主な使用技術)
-  - [設計の工夫](#設計の工夫)
-- [導入と使用方法](#導入と使用方法)
-  - [実行ファイル (.exe) による利用（一般ユーザー向け）](#実行ファイル-exe-による利用一般ユーザー向け)
-  - [ソースコードからの実行（開発者向け）](#ソースコードからの実行開発者向け)
+- [技術スタックとアーキテクチャ](#技術スタックとアーキテクチャ)
+  - [使用技術と選定理由](#使用技術と選定理由)
+  - [レイヤー構成](#レイヤー構成)
+  - [中心データ構造](#中心データ構造)
+  - [設計パターン](#設計パターン)
+- [クイックスタート](#クイックスタート)
+- [開発者向けセットアップ](#開発者向けセットアップ)
 - [テストの実行](#テストの実行)
 - [今後の展望](#今後の展望)
 
@@ -98,74 +100,136 @@
 - **解析結果のシームレスな共有**: 算出された各サンプルのパラメータ一覧を、ExcelやPowerPointに直接ペースト可能なTSV形式またはHTML形式でクリップボードにコピーする機能を備える。
 - **実行ログの記録**: 解析の過程やエラー情報、保存時の詳細などを「ログ」タブに記録し、トラブルシューティングを容易に。
 
-## 主な使用技術
+---
 
-| カテゴリ | 使用技術 |
-| :--- | :--- |
-| **開発言語** | Python 3.11+ |
-| **GUIフレームワーク** | Tkinter, ttk (Python標準ライブラリ) |
-| **GUI拡張・テーマ** | sv-ttk, tkinterdnd2 |
-| **データ解析・演算** | Pandas, NumPy, SciPy |
-| **データ可視化** | Matplotlib |
-| **テスト** | pytest |
-| **バージョン管理・その他** | Git, GitHub |
+## 技術スタックとアーキテクチャ
 
-### 設計の工夫
-- **関心事の分離 (SoC)**: UIコンポーネント、状態管理 (`StateManager`)、グラフ描画 (`GraphManager`)、イベント処理 (`EventHandlers`)、そして純粋な数学的演算 (`analysis` モジュール) を明確にクラス分割し、密結合を防いでいる。
-- **デバウンス更新**: UI変数の変更から500msの遅延を挟んでグラフ再描画を行うことで、連続入力時の過剰な再描画を防ぎUXを向上。
-- **堅牢な品質保証**: 物理量の算出アルゴリズムに対して `pytest` を用いたユニットテストを記述し、境界値やエッジケースに対する数学的な正確性を継続的に保証する体制を整えている。
+### 使用技術と選定理由
 
-## 導入と使用方法
+| カテゴリ | 使用技術 | 選定理由 |
+| :--- | :--- | :--- |
+| **開発言語** | Python 3.11+ | 科学計算エコシステムの充実と、PyInstallerによるスタンドアロン配布の容易さ |
+| **GUIフレームワーク** | Tkinter / ttk | Python標準ライブラリ。外部依存ゼロで `.exe` 単体配布が可能 |
+| **GUIテーマ** | sv-ttk | Windows 11ネイティブ風の洗練されたデザインを低コストで実現。ただしボタン色はエレメントレベルで上書きされるため、カスタムカラーが必要な箇所は `tk.Button` で直接指定する設計上の工夫が必要 |
+| **D&Dサポート** | tkinterdnd2 | Tkinter標準では未対応のドラッグ＆ドロップを補完 |
+| **データ処理** | Pandas / NumPy | 数千〜数万点に及ぶ測定データの高速ベクトル演算とデータ整形 |
+| **数値計算** | SciPy | 反磁性係数 $\chi$ の線形回帰（`linregress`）、保磁力 $H_c$ のゼロ交差点補間（`interp1d`）に使用 |
+| **データ可視化** | Matplotlib | 論文投稿品質のSVG/PDFエクスポート、TeX記法サポート、インタラクティブなズーム操作 |
+| **テスト** | pytest | 純粋関数の境界値・エッジケーステストを簡潔に記述し、継続的な計算精度を保証 |
+| **バージョン管理** | Git / GitHub | ソースコード管理およびReleasesによる実行ファイルの配布 |
 
-本アプリケーションは、Python環境の構築が不要な **実行ファイル (.exe) による利用** が可能。
+---
 
-### 実行ファイル (.exe) による利用（一般ユーザー向け）
+### レイヤー構成
 
-1. **ダウンロード**
-   GitHubの [Releases ページ](https://github.com/shrhrt/VSM_ANALYSIS/releases/tag/v1.0) より、最新バージョンのzipファイルをダウンロード。
-2. **展開と配置**
-   ダウンロードしたzipファイルを解凍し、任意のフォルダに配置。
-3. **起動**
-   フォルダ内の実行ファイル（`VSM_Analyzer.exe`）をダブルクリックしてアプリケーションを起動。
+アプリケーションは関心事の分離（SoC）を徹底し、UIロジック・状態管理・描画・計算をそれぞれ独立したクラス・モジュールに分割している。
 
-> **💡 Note: セキュリティ警告について**
-> 初回起動時、WindowsのSmartScreen機能により「Windows によって PC が保護されました」という青い警告画面が表示される場合がある。**「詳細情報」をクリックし、右下に現れる「実行」ボタンを選択する**ことで、安全に起動。
+```
+main.py
+└── app/vsm_app.py          VSMApp      メインGUI・タブ管理・vsm_dataの保持
+    ├── app/state_manager.py    StateManager  全 tk.Var を一元管理
+    ├── app/graph_manager.py    GraphManager  Matplotlib グラフ描画
+    ├── app/event_handlers.py   EventHandlers ユーザー操作イベントのハンドラ群
+    └── app/analysis_tab.py     AnalysisTab   解析タブのUI構築
+         │
+         └── analysis/
+             ├── calculations.py   純粋な数学関数（Ms / Mr / Hc 計算、反磁性補正）
+             └── file_io.py        .VSM ファイル読み込み・メタデータ解析
+```
 
-### ソースコードからの実行（開発者向け）
+各レイヤーの責務は明確に分離されており、`calculations.py` はGUIへの依存をゼロに保つことで、ユニットテストが単独で実行できる構造になっている。
 
-**前提条件**: 実行環境に [Python 3.11 以上](https://www.python.org/downloads/) がインストールされていること。
+---
 
-開発や機能のカスタマイズを行う場合は、以下の手順に従いソースコードから環境構築および起動を行う。
+### 中心データ構造
 
-1. **リポジトリの取得**
-   コマンドプロンプトやターミナルを開き、ソースコードをクローンしてディレクトリを移動する。
-   ```bash
-   git clone https://github.com/shrhrt/VSM_ANALYSIS.git
-   cd VSM_Analysis
-   ```
+アプリの状態は `VSMApp.vsm_data`（辞書のリスト）に集約される。1要素が1ファイルに対応し、以下のキーを持つ。
 
-2. **仮想環境の作成と有効化（推奨）**
-   プロジェクト専用の独立したPython環境を構築。
-   ```bash
-   # 仮想環境を作成（"env" という名前のディレクトリが作成される）
-   python -m venv env
+| キー | 型 | 内容 |
+| :--- | :--- | :--- |
+| `path` | `pathlib.Path` | ファイルパス |
+| `df` | `pd.DataFrame` | 生測定データ（列: `H(Oe)`, `M(emu)`） |
+| `demag_settings` | `dict` | 反磁性補正の設定値（有効/手動/範囲） |
+| `demag_vars` | `dict` | 補正設定に対応する `tk.Var` オブジェクト群 |
+| `thickness_var` | `tk.StringVar` | 膜厚 (nm) |
+| `area_var` | `tk.StringVar` | 面積 (mm²) |
+| `color_var` | `tk.StringVar` | プロット色（HEX） |
+| `visible_var` | `tk.BooleanVar` | 表示 / 非表示フラグ |
 
-   # 仮想環境を有効化する（Windowsの場合）
-   env\Scripts\activate
+単位変換はこのデータを保持したまま `GraphManager` 内で行われ、内部計算は常にSI単位系（T, kA/m）で統一している。
 
-   # 仮想環境を有効化する（macOS / Linuxの場合）
-   source env/bin/activate
-   ```
+---
 
-3. **必要なライブラリのインストール**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 設計パターン
 
-4. **アプリケーションの起動**
-   ```bash
-   python main.py
-   ```
+**デバウンス更新**
+
+UIの各 `tk.Var` には `trace_add("write", _schedule_update)` が設定されており、値が変化すると500msのタイマーをセットする。タイマー発火前に再度変化があればタイマーをリセットすることで、連続入力時の過剰な再描画を防いでいる。
+
+```
+tk.Var 変化
+    └─→ _schedule_update()
+            └─→ root.after(500ms, update_graph)  ← 既存タイマーをキャンセルして再セット
+                    └─→ GraphManager.update_graph()
+```
+
+**テーマ非対応ボタンへの対処**
+
+`sv-ttk` は `ttk.Button` の背景色をTCLエレメントレベルで上書きするため、`style.configure()` が効かない。アクセント色・危険色など色が必要なすべてのボタンは `tk.Button` に切り替え、`bg` / `activebackground` を直接指定することで解決した。
+
+**セッションの相対パス復元**
+
+`.vsm_session` ファイルにはファイルパスを相対パス（セッションファイルからの相対）で保存する。復元時に絶対パスへ変換することで、OneDrive等のクラウドストレージ経由で別PCにフォルダをコピーした場合でも作業を完全に再現できる。
+
+---
+
+## クイックスタート
+
+> Python環境の構築は不要です。最短3ステップで解析を開始できます。
+
+**ステップ 1 — ダウンロード**
+
+GitHubの [Releases ページ](https://github.com/shrhrt/VSM_ANALYSIS/releases/tag/v1.0) から最新の `VSM_Analyzer_vX.X.zip` をダウンロード。
+
+**ステップ 2 — 起動**
+
+ZIPを解凍し、`VSM_Analyzer.exe` をダブルクリック。
+
+> **SmartScreen警告が表示された場合**
+> Windowsの保護機能による表示です。「詳細情報」をクリックし、右下に現れる「実行」を選択してください。
+
+**ステップ 3 — データ読み込み**
+
+`.VSM` ファイルをウィンドウにドラッグ＆ドロップするとグラフが即座に描画されます。
+
+---
+
+## 開発者向けセットアップ
+
+**前提条件**: [Python 3.11 以上](https://www.python.org/downloads/) がインストール済みであること。
+
+```bash
+# 1. リポジトリのクローン
+git clone https://github.com/shrhrt/VSM_ANALYSIS.git
+cd VSM_Analysis
+
+# 2. 仮想環境の作成と有効化
+python -m venv env
+env\Scripts\activate        # Windows
+# source env/bin/activate   # macOS / Linux
+
+# 3. 依存ライブラリのインストール
+pip install -r requirements.txt
+
+# 4. 起動
+python main.py
+```
+
+**実行ファイルのビルド（PyInstaller）**
+
+```bash
+pyinstaller main.spec
+```
 
 ## テストの実行
 
