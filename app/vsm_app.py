@@ -143,13 +143,7 @@ class VSMApp:
         ).pack(side=tk.RIGHT)
 
         self.log_text = scrolledtext.ScrolledText(
-            log_tab, wrap=tk.WORD,
-            font=theme.FONT_LOG,
-            bg=theme.LOG_BG, fg=theme.LOG_FG_INFO,
-            insertbackground="white",
-            selectbackground="#2a4a7a",
-            borderwidth=0, highlightthickness=0,
-            state=tk.DISABLED,
+            log_tab, wrap=tk.WORD, font=theme.FONT_LOG, state=tk.DISABLED,
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 

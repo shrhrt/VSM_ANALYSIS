@@ -136,7 +136,7 @@ class AnalysisTab:
         demag_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         demag_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.apply_to_all_button = ttk.Button(
+        self.apply_to_all_button = theme.accent_button(
             demag_outer_frame,
             text="一番上の設定を全ファイルに適用",
             command=self.app.event_handlers.apply_first_file_settings_to_all,
@@ -147,7 +147,7 @@ class AnalysisTab:
         # --- Ms計算フレーム ---
         ms_section, ms_frame = theme.make_section(parent, "飽和磁化 (Ms) 計算")
         ms_section.pack(fill=tk.X, pady=(0, 10))
-        self.ms_settings_button = ttk.Button(
+        self.ms_settings_button = theme.accent_button(
             ms_frame,
             text="計算範囲を手動指定...",
             command=self.app.event_handlers.show_ms_settings_window,

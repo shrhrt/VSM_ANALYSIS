@@ -25,6 +25,12 @@ DANGER_COLOR  = "#DC2626"   # Red
 DANGER_DARK   = "#B91C1C"   # Red (hover)
 SECTION_PADDING = 10
 
+# ログ用テキスト色（白背景向け）
+LOG_FG_TS      = "#999999"   # タイムスタンプ（グレー）
+LOG_FG_INFO    = "#222222"   # 通常テキスト
+LOG_FG_SUCCESS = "#1a7f37"   # 成功（深い緑）
+LOG_FG_ERROR   = "#cf222e"   # エラー（深い赤）
+
 
 def _theme_bg() -> str:
     """現在の sv_ttk テーマに応じた背景色を返す。"""
@@ -52,7 +58,7 @@ def apply_theme(style: ttk.Style) -> None:
         background=[("active", DANGER_DARK),  ("disabled", "#F3F4F6"), ("!active", "#FFF1F1")],
     )
 
-    # Accent.TButton の色をインディゴに上書き
+    # Accent.TButton の色を上書き（sv_ttk 非対応だが一応設定）
     style.configure("Accent.TButton", background=ACCENT_COLOR)
     style.map("Accent.TButton",
         background=[("active", ACCENT_DARK), ("!active", ACCENT_COLOR)],
@@ -61,7 +67,7 @@ def apply_theme(style: ttk.Style) -> None:
 
 def make_section(parent: tk.Widget, text: str, padding: int = SECTION_PADDING) -> tuple:
     """モダンなカードスタイルのセクションを生成する。
-    ttk.LabelFrame の代替。ボーダーなし、タイトルは太字＋アクセントカラー。
+    左端にアクセントカラーの縦ストライプ、タイトルは太字＋アクセントカラー。
     Returns (outer_frame, content_frame)。子ウィジェットは content_frame に追加する。
 
     NOTE: sv_ttk が ttk.Label の foreground をエレメントレベルで上書きするため、
@@ -69,7 +75,15 @@ def make_section(parent: tk.Widget, text: str, padding: int = SECTION_PADDING) -
     """
     outer = ttk.Frame(parent)
 
-    header = ttk.Frame(outer)
+    # 左端の緑ストライプ（モダンカードUIのアクセント）
+    stripe = tk.Frame(outer, bg=ACCENT_COLOR, width=4)
+    stripe.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
+    stripe.pack_propagate(False)
+
+    inner = ttk.Frame(outer)
+    inner.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    header = ttk.Frame(inner)
     header.pack(fill=tk.X, pady=(4, 0))
 
     # tk.Label で fg を直接指定（sv_ttk の ttk.Label foreground 上書き問題を回避）
@@ -86,21 +100,16 @@ def make_section(parent: tk.Widget, text: str, padding: int = SECTION_PADDING) -
         side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0), pady=5
     )
 
-    content = ttk.Frame(outer, padding=padding)
+    content = ttk.Frame(inner, padding=padding)
     content.pack(fill=tk.BOTH, expand=True)
 
     return outer, content
 
 
-LOG_BG          = "#0d1117"   # ターミナル背景（GitHub Dark）
-LOG_FG_INFO     = "#c9d1d9"   # 通常テキスト
-LOG_FG_SUCCESS  = "#3fb950"   # 成功（明るい緑）
-LOG_FG_ERROR    = "#f85149"   # エラー（明るい赤）
-LOG_FG_TS       = "#6e7681"   # タイムスタンプ（暗いグレー）
-
-
 def accent_button(parent: tk.Widget, **kwargs) -> tk.Button:
-    """緑のプライマリボタン。ttk では sv_ttk が色を上書きするため tk.Button を使用。"""
+    """緑のプライマリボタン。ttk では sv_ttk が色を上書きするため tk.Button を使用。
+    ホバー時に暗い緑に変化するエフェクト付き。
+    """
     kw = dict(
         bg=ACCENT_COLOR, fg="white",
         activebackground=ACCENT_DARK, activeforeground="white",
@@ -108,11 +117,14 @@ def accent_button(parent: tk.Widget, **kwargs) -> tk.Button:
         padx=12, pady=6, borderwidth=0,
     )
     kw.update(kwargs)
-    return tk.Button(parent, **kw)
+    btn = tk.Button(parent, **kw)
+    btn.bind("<Enter>", lambda e: btn.config(bg=ACCENT_DARK)   if btn["state"] != "disabled" else None)
+    btn.bind("<Leave>", lambda e: btn.config(bg=ACCENT_COLOR)  if btn["state"] != "disabled" else None)
+    return btn
 
 
 def danger_button(parent: tk.Widget, **kwargs) -> tk.Button:
-    """赤の危険操作ボタン。"""
+    """赤の危険操作ボタン。ホバー時に暗い赤に変化するエフェクト付き。"""
     kw = dict(
         bg=DANGER_COLOR, fg="white",
         activebackground=DANGER_DARK, activeforeground="white",
@@ -120,7 +132,10 @@ def danger_button(parent: tk.Widget, **kwargs) -> tk.Button:
         padx=12, pady=6, borderwidth=0,
     )
     kw.update(kwargs)
-    return tk.Button(parent, **kw)
+    btn = tk.Button(parent, **kw)
+    btn.bind("<Enter>", lambda e: btn.config(bg=DANGER_DARK)   if btn["state"] != "disabled" else None)
+    btn.bind("<Leave>", lambda e: btn.config(bg=DANGER_COLOR)  if btn["state"] != "disabled" else None)
+    return btn
 
 
 def setup_treeview_tags(tree: ttk.Treeview) -> None:
