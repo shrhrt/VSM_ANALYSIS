@@ -409,6 +409,49 @@ S = Mr / Ms""",
             self.app.fig.set_size_inches(original_size[0], original_size[1])
             self.app.canvas.draw_idle()
 
+    def copy_graph_to_clipboard(self) -> None:
+        """現在のグラフをDIB形式でクリップボードにコピーする（PowerPoint/Word等に直接貼り付け可能）。"""
+        import io
+        try:
+            import win32clipboard
+            import win32con
+        except ImportError:
+            messagebox.showerror(
+                "エラー",
+                "pywin32がインストールされていません。\npip install pywin32 を実行してください。",
+                parent=self.app.root,
+            )
+            return
+
+        try:
+            dpi = float(self.app.state.save_dpi_var.get())
+        except ValueError:
+            dpi = 150.0
+
+        try:
+            buf = io.BytesIO()
+            self.app.fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+            buf.seek(0)
+
+            from PIL import Image
+            img = Image.open(buf).convert("RGB")
+
+            bmp_buf = io.BytesIO()
+            img.save(bmp_buf, format="BMP")
+            dib_data = bmp_buf.getvalue()[14:]  # BMP ファイルヘッダ(14byte)を除いたDIB形式
+
+            win32clipboard.OpenClipboard()
+            try:
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardData(win32con.CF_DIB, dib_data)
+            finally:
+                win32clipboard.CloseClipboard()
+
+            self.app.log_message("グラフをクリップボードにコピーしました。", level="success")
+        except Exception as e:
+            self.app.log_message(f"クリップボードコピー失敗: {e}", level="error")
+            messagebox.showerror("エラー", f"コピーに失敗しました:\n{e}", parent=self.app.root)
+
     def show_advanced_style_window(self) -> None:
         """凡例名、マーカー、軸の数値フォーマットなどを設定する詳細スタイルウィンドウを表示します。"""
         if not self.app.vsm_data:

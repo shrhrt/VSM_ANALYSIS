@@ -515,6 +515,11 @@ class VSMApp:
             text="画像を保存",
             command=self.event_handlers.save_figure,
         ).pack(fill=tk.X, expand=True, side=tk.BOTTOM)
+        theme.accent_button(
+            save_button_frame,
+            text="クリップボードにコピー",
+            command=self.event_handlers.copy_graph_to_clipboard,
+        ).pack(fill=tk.X, expand=True, side=tk.BOTTOM, pady=(0, 5))
 
     def _add_traces(self) -> None:
         """状態変数(StateManagerの変数)の変更を監視し、変更時にグラフ更新をスケジュール。"""
