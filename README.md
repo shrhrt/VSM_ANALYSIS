@@ -104,82 +104,52 @@
 
 ## 技術スタックとアーキテクチャ
 
-### 使用技術と選定理由
+### 使用技術
 
 | カテゴリ | 使用技術 | 選定理由 |
 | :--- | :--- | :--- |
-| **開発言語** | Python 3.11+ | 科学計算エコシステムの充実と、PyInstallerによるスタンドアロン配布の容易さ |
-| **GUIフレームワーク** | Tkinter / ttk | Python標準ライブラリ。外部依存ゼロで `.exe` 単体配布が可能 |
-| **GUIテーマ** | sv-ttk | Windows 11ネイティブ風の洗練されたデザインを低コストで実現。ただしボタン色はエレメントレベルで上書きされるため、カスタムカラーが必要な箇所は `tk.Button` で直接指定する設計上の工夫が必要 |
-| **D&Dサポート** | tkinterdnd2 | Tkinter標準では未対応のドラッグ＆ドロップを補完 |
-| **データ処理** | Pandas / NumPy | 数千〜数万点に及ぶ測定データの高速ベクトル演算とデータ整形 |
-| **数値計算** | SciPy | 反磁性係数 $\chi$ の線形回帰（`linregress`）、保磁力 $H_c$ のゼロ交差点補間（`interp1d`）に使用 |
-| **データ可視化** | Matplotlib | 論文投稿品質のSVG/PDFエクスポート、TeX記法サポート、インタラクティブなズーム操作 |
-| **テスト** | pytest | 純粋関数の境界値・エッジケーステストを簡潔に記述し、継続的な計算精度を保証 |
-| **バージョン管理** | Git / GitHub | ソースコード管理およびReleasesによる実行ファイルの配布 |
+| **開発言語** | Python 3.11+ | 科学計算ライブラリの充実、PyInstallerによる単体配布が容易 |
+| **GUIフレームワーク** | Tkinter / ttk | Python標準。外部依存ゼロで `.exe` 配布が可能 |
+| **GUIテーマ** | sv-ttk | Win11ネイティブ風デザイン |
+| **D&Dサポート** | tkinterdnd2 | Tkinterに不足するD&D機能を補完 |
+| **データ処理** | Pandas / NumPy | 測定データの高速ベクトル演算 |
+| **数値計算** | SciPy | 線形回帰（反磁性係数 $\chi$）・ゼロ交差点補間（保磁力 $H_c$） |
+| **データ可視化** | Matplotlib | 論文品質出力・SVG/PDF・TeX記法サポート |
+| **テスト** | pytest | 純粋関数のユニットテスト |
+| **バージョン管理** | Git / GitHub | コード管理・実行ファイルのリリース配布 |
 
 ---
 
 ### レイヤー構成
 
-アプリケーションは関心事の分離（SoC）を徹底し、UIロジック・状態管理・描画・計算をそれぞれ独立したクラス・モジュールに分割している。
-
 ```
 main.py
-└── app/vsm_app.py          VSMApp      メインGUI・タブ管理・vsm_dataの保持
+└── app/vsm_app.py          VSMApp        メインGUI・タブ管理・データ保持
     ├── app/state_manager.py    StateManager  全 tk.Var を一元管理
     ├── app/graph_manager.py    GraphManager  Matplotlib グラフ描画
-    ├── app/event_handlers.py   EventHandlers ユーザー操作イベントのハンドラ群
+    ├── app/event_handlers.py   EventHandlers ユーザー操作ハンドラ群
     └── app/analysis_tab.py     AnalysisTab   解析タブのUI構築
          │
          └── analysis/
-             ├── calculations.py   純粋な数学関数（Ms / Mr / Hc 計算、反磁性補正）
+             ├── calculations.py   純粋な数学関数（Ms / Mr / Hc・反磁性補正）
              └── file_io.py        .VSM ファイル読み込み・メタデータ解析
 ```
 
-各レイヤーの責務は明確に分離されており、`calculations.py` はGUIへの依存をゼロに保つことで、ユニットテストが単独で実行できる構造になっている。
-
 ---
 
-### 中心データ構造
+### 設計の工夫
 
-アプリの状態は `VSMApp.vsm_data`（辞書のリスト）に集約される。1要素が1ファイルに対応し、以下のキーを持つ。
+**連続入力でもUIが固まらないグラフ更新**
+補正係数や膜厚を調整するたびにグラフを再描画するとUIがフリーズする。各 `tk.Var` の変化から500msの遅延を挟み、最後の入力が確定してから一度だけ再描画するデバウンス方式を採用した。
 
-| キー | 型 | 内容 |
-| :--- | :--- | :--- |
-| `path` | `pathlib.Path` | ファイルパス |
-| `df` | `pd.DataFrame` | 生測定データ（列: `H(Oe)`, `M(emu)`） |
-| `demag_settings` | `dict` | 反磁性補正の設定値（有効/手動/範囲） |
-| `demag_vars` | `dict` | 補正設定に対応する `tk.Var` オブジェクト群 |
-| `thickness_var` | `tk.StringVar` | 膜厚 (nm) |
-| `area_var` | `tk.StringVar` | 面積 (mm²) |
-| `color_var` | `tk.StringVar` | プロット色（HEX） |
-| `visible_var` | `tk.BooleanVar` | 表示 / 非表示フラグ |
+**計算ロジックをGUIから完全に切り離す**
+`calculations.py` はGUI依存ゼロの純粋関数で構成されている。この分離により、pytestによるユニットテストがGUIなしで動き、アルゴリズムの正確性を継続的に保証できる。
 
-単位変換はこのデータを保持したまま `GraphManager` 内で行われ、内部計算は常にSI単位系（T, kA/m）で統一している。
+**sv-ttkのボタン色制限への対処**
+`sv-ttk` はボタン背景色をTCLエレメントレベルで上書きするため、`style.configure()` が効かない。カスタム色が必要なボタンをすべて `tk.Button` に切り替え、`bg` / `activebackground` を直接指定することで解決した。
 
----
-
-### 設計パターン
-
-**デバウンス更新**
-
-UIの各 `tk.Var` には `trace_add("write", _schedule_update)` が設定されており、値が変化すると500msのタイマーをセットする。タイマー発火前に再度変化があればタイマーをリセットすることで、連続入力時の過剰な再描画を防いでいる。
-
-```
-tk.Var 変化
-    └─→ _schedule_update()
-            └─→ root.after(500ms, update_graph)  ← 既存タイマーをキャンセルして再セット
-                    └─→ GraphManager.update_graph()
-```
-
-**テーマ非対応ボタンへの対処**
-
-`sv-ttk` は `ttk.Button` の背景色をTCLエレメントレベルで上書きするため、`style.configure()` が効かない。アクセント色・危険色など色が必要なすべてのボタンは `tk.Button` に切り替え、`bg` / `activebackground` を直接指定することで解決した。
-
-**セッションの相対パス復元**
-
-`.vsm_session` ファイルにはファイルパスを相対パス（セッションファイルからの相対）で保存する。復元時に絶対パスへ変換することで、OneDrive等のクラウドストレージ経由で別PCにフォルダをコピーした場合でも作業を完全に再現できる。
+**クラウド経由でも再現できるセッション保存**
+`.vsm_session` のファイルパスは絶対パスではなく相対パスで保存する。OneDriveでフォルダを別PCに同期した場合でも、パスを正しく解決して作業状態を完全に再現できる。
 
 ---
 
