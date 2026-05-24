@@ -20,11 +20,11 @@ class AnalysisTab:
         self.app = app
 
         # 他のモジュールからアクセスされる主要なウィジェットの参照を保持
-        self.info_button: ttk.Button
+        self.info_button: tk.Button
         self.thickness_scrollable_frame: ttk.Frame
         self.demag_scrollable_frame: ttk.Frame
-        self.apply_to_all_button: ttk.Button
-        self.ms_settings_button: ttk.Button
+        self.apply_to_all_button: tk.Button
+        self.ms_settings_button: tk.Button
 
         self._build_ui()
 
@@ -39,18 +39,17 @@ class AnalysisTab:
             text="ファイルを選択 (新規)",
             command=self.app.event_handlers.load_files,
         ).pack(fill=tk.X)
-        ttk.Button(
+        theme.secondary_button(
             file_frame,
             text="ファイルを追加...",
             command=self.app.event_handlers.add_files,
-            padding="10 5",
         ).pack(fill=tk.X, pady=(5, 0))
         theme.danger_button(
             file_frame,
             text="ファイルを全て削除",
             command=self.app.event_handlers.clear_all_files,
         ).pack(fill=tk.X, pady=(5, 0))
-        self.info_button = ttk.Button(
+        self.info_button = theme.secondary_button(
             file_frame,
             text="測定情報を表示",
             command=self.app.event_handlers.show_metadata_window,

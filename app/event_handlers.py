@@ -826,8 +826,8 @@ S = Mr / Ms""",
                     parent=settings_window,
                 )
 
-        ttk.Button(
-            button_frame, text="キャンセル", command=settings_window.destroy
+        theme.neutral_button(
+            button_frame, text="キャンセル", command=settings_window.destroy,
         ).grid(row=0, column=0, sticky="ew", padx=(0, 5))
         theme.accent_button(
             button_frame, text="OK & 保存", command=save_settings,

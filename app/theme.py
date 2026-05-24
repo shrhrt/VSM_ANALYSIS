@@ -21,6 +21,10 @@ FONT_LOG     = ("Consolas", 10)
 ACCENT_COLOR  = "#00704A"   # Starbucks Emerald Green
 ACCENT_DARK   = "#005A3C"   # Dark Green (hover)
 ACCENT_LIGHT  = "#E8F5EF"   # Pale Green（Treeview 偶数行など）
+SECONDARY_COLOR = "#475569"  # Slate 600 — 二次アクション
+SECONDARY_DARK  = "#334155"  # Slate 700 (hover)
+NEUTRAL_COLOR   = "#6B7280"  # Gray 500 — 小ボタン・キャンセル
+NEUTRAL_DARK    = "#4B5563"  # Gray 600 (hover)
 DANGER_COLOR  = "#DC2626"   # Red
 DANGER_DARK   = "#B91C1C"   # Red (hover)
 SECTION_PADDING = 10
@@ -120,6 +124,36 @@ def accent_button(parent: tk.Widget, **kwargs) -> tk.Button:
     btn = tk.Button(parent, **kw)
     btn.bind("<Enter>", lambda e: btn.config(bg=ACCENT_DARK)   if btn["state"] != "disabled" else None)
     btn.bind("<Leave>", lambda e: btn.config(bg=ACCENT_COLOR)  if btn["state"] != "disabled" else None)
+    return btn
+
+
+def secondary_button(parent: tk.Widget, **kwargs) -> tk.Button:
+    """スレートグレーの二次ボタン（詳細設定・コピー・追加など）。"""
+    kw = dict(
+        bg=SECONDARY_COLOR, fg="white",
+        activebackground=SECONDARY_DARK, activeforeground="white",
+        relief="flat", font=FONT_BODY, cursor="hand2",
+        padx=12, pady=6, borderwidth=0,
+    )
+    kw.update(kwargs)
+    btn = tk.Button(parent, **kw)
+    btn.bind("<Enter>", lambda e: btn.config(bg=SECONDARY_DARK)  if btn["state"] != "disabled" else None)
+    btn.bind("<Leave>", lambda e: btn.config(bg=SECONDARY_COLOR) if btn["state"] != "disabled" else None)
+    return btn
+
+
+def neutral_button(parent: tk.Widget, **kwargs) -> tk.Button:
+    """グレーの小ボタン（↑↓移動・色選択・キャンセルなどユーティリティ用）。"""
+    kw = dict(
+        bg=NEUTRAL_COLOR, fg="white",
+        activebackground=NEUTRAL_DARK, activeforeground="white",
+        relief="flat", font=FONT_BODY, cursor="hand2",
+        padx=8, pady=4, borderwidth=0,
+    )
+    kw.update(kwargs)
+    btn = tk.Button(parent, **kw)
+    btn.bind("<Enter>", lambda e: btn.config(bg=NEUTRAL_DARK)  if btn["state"] != "disabled" else None)
+    btn.bind("<Leave>", lambda e: btn.config(bg=NEUTRAL_COLOR) if btn["state"] != "disabled" else None)
     return btn
 
 

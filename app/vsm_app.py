@@ -439,7 +439,7 @@ class VSMApp:
         # --- 詳細設定ボタン ---
         adv_settings_section, adv_settings_frame = theme.make_section(parent, "詳細設定")
         adv_settings_section.pack(fill=tk.X, pady=(10, 0))
-        ttk.Button(
+        theme.secondary_button(
             adv_settings_frame,
             text="凡例・線のスタイル・軸を設定...",
             command=self.event_handlers.show_advanced_style_window,
@@ -573,26 +573,21 @@ class VSMApp:
 
             # --- 上移動ボタン ---
             # lambda内の idx=i は、ループ変数の遅延評価（すべてのボタンが最後のインデックスを参照してしまうバグ）を防ぐための必須の記述である。
-            up_button = ttk.Button(
-                row_frame,
-                text="↑",
-                width=3,
+            up_button = theme.neutral_button(
+                row_frame, text="↑", width=3,
                 command=lambda idx=i: self.event_handlers.move_file_up(idx),
+                padx=4, pady=2,
             )
             up_button.pack(side=tk.LEFT, padx=(0, 2))
-            # 一番上の要素の場合は上移動ボタンを無効化する。
             if i == 0:
                 up_button.config(state=tk.DISABLED)
 
-            # --- 下移動ボタン ---
-            down_button = ttk.Button(
-                row_frame,
-                text="↓",
-                width=3,
+            down_button = theme.neutral_button(
+                row_frame, text="↓", width=3,
                 command=lambda idx=i: self.event_handlers.move_file_down(idx),
+                padx=4, pady=2,
             )
             down_button.pack(side=tk.LEFT, padx=(0, 5))
-            # 一番下の要素の場合は下移動ボタンを無効化する。
             if i == len(self.vsm_data) - 1:
                 down_button.config(state=tk.DISABLED)
 
@@ -630,12 +625,10 @@ class VSMApp:
                     self._schedule_update(),
                 ),
             )
-            # カラーピッカーを開くボタン。
-            ttk.Button(
-                row_frame,
-                text="色選択",
-                width=6,
+            theme.neutral_button(
+                row_frame, text="色選択", width=6,
                 command=lambda idx=i: self.event_handlers.choose_individual_color(idx),
+                padx=4, pady=2,
             ).pack(side=tk.RIGHT)
 
     def _schedule_update(self, *args: Any) -> None:
@@ -1012,19 +1005,17 @@ class VSMApp:
         button_frame = ttk.Frame(frame)
         button_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
-        copy_text_button = ttk.Button(
+        theme.secondary_button(
             button_frame,
             text="テキストとしてコピー",
             command=self._copy_results_to_clipboard,
-        )
-        copy_text_button.pack(side="left", padx=5)
+        ).pack(side="left", padx=5)
 
-        copy_html_button = ttk.Button(
+        theme.secondary_button(
             button_frame,
             text="表としてコピー (PowerPoint等)",
             command=self._copy_results_as_html,
-        )
-        copy_html_button.pack(side="left", padx=5)
+        ).pack(side="left", padx=5)
 
     def _update_results_table(self) -> None:
         """解析結果テーブルを最新のデータでクリアおよび再描画します。"""
