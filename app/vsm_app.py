@@ -650,20 +650,23 @@ class VSMApp:
         self.log_text.config(state=tk.DISABLED)
 
     def log_message(self, message: str, level: str = "info") -> None:
-        """ログタブにタイムスタンプ＋色付きでメッセージを追記する。level: info / success / error"""
-        tag = f"log_{level}" if level in ("info", "success", "error") else "log_info"
-        # INFO はラベルなし、SUCCESS/ERROR は記号付き
-        prefix = {"success": " ✓", "error": " ✗"}.get(level, "")
-        ts = datetime.now().strftime("%H:%M:%S")
+        """ログタブに色付きでメッセージを追記する。level: info / success / error
+        「警告」を含む行は level に関わらず赤で表示する。
+        """
+        default_tag = f"log_{level}" if level in ("info", "success", "error") else "log_info"
+        prefix = {"success": "✓  ", "error": "✗  "}.get(level, "")
 
         self.log_text.config(state=tk.NORMAL)
+        is_first = True
         for line in message.splitlines(keepends=True):
             stripped = line.rstrip("\n")
             if stripped:
-                self.log_text.insert(tk.END, f"[{ts}]", "log_ts")
-                if prefix:
+                # 「警告」を含む行は強制的に赤
+                tag = "log_error" if "警告" in stripped else default_tag
+                if is_first and prefix:
                     self.log_text.insert(tk.END, prefix, tag)
-                self.log_text.insert(tk.END, f"  {stripped}\n", tag)
+                is_first = False
+                self.log_text.insert(tk.END, f"{stripped}\n", tag)
             else:
                 self.log_text.insert(tk.END, "\n")
         self.log_text.config(state=tk.DISABLED)
