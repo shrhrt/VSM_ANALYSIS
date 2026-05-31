@@ -34,13 +34,14 @@ class LanguageManager:
 
     def _get_base_path(self) -> Path:
         """
-        実行環境のベースパスを取得します。
-        PyInstallerでexe化された場合(sys._MEIPASS)と、通常のPythonスクリプトとして
-        実行された場合の両方に対応します。
+        PyInstaller / Nuitka / 通常実行の全環境でベースパスを取得します。
         """
         if hasattr(sys, "_MEIPASS"):
-            # PyInstallerでパッケージ化された場合の一時フォルダパス
+            # PyInstaller: 一時解凍フォルダ
             return Path(sys._MEIPASS)
+        elif "__compiled__" in globals():
+            # Nuitka standalone: exe と同じフォルダ
+            return Path(sys.executable).parent
         return Path(__file__).parent.parent
 
     def load_language(self, lang_code: str) -> None:

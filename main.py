@@ -10,12 +10,15 @@ from app.vsm_app import VSMApp
 
 
 def get_resource_path(relative_path):
-    """PyInstallerでビルドされた実行ファイル内のリソースパスを取得"""
-    try:
-        # PyInstaller実行時は一時フォルダ(_MEIPASS)のパスを返す
+    """PyInstaller / Nuitka / 通常実行の全環境でリソースパスを取得"""
+    if hasattr(sys, "_MEIPASS"):
+        # PyInstaller: 一時解凍フォルダ
         base_path = sys._MEIPASS
-    except Exception:
-        # 通常のPythonスクリプトとして実行した場合は現在のディレクトリを返す
+    elif "__compiled__" in globals():
+        # Nuitka standalone: exe と同じフォルダ
+        base_path = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        # 通常の Python スクリプト実行
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
