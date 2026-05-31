@@ -109,7 +109,7 @@
 
 | カテゴリ | 使用技術 | 選定理由 |
 | :--- | :--- | :--- |
-| **開発言語** | Python 3.11+ | 科学計算ライブラリの充実、PyInstallerによる単体配布が容易 |
+| **開発言語** | Python 3.11+ | 科学計算ライブラリの充実 |
 | **GUIフレームワーク** | Tkinter / ttk | Python標準。外部依存ゼロで `.exe` 配布が可能 |
 | **GUIテーマ** | sv-ttk | Win11ネイティブ風デザイン |
 | **D&Dサポート** | tkinterdnd2 | Tkinterに不足するD&D機能を補完 |
@@ -198,10 +198,10 @@ python main.py
 **実行ファイルのビルド**
 
 ```bat
-pyinstaller main.spec
+python -m nuitka --zig --assume-yes-for-downloads --standalone --enable-plugin=tk-inter --include-package=tkinterdnd2 --include-package-data=tkinterdnd2 --windows-console-mode=disable --include-data-dir=assets=assets --include-data-dir=locales=locales --windows-icon-from-ico=assets\app_icon.ico --output-filename=VSM_Analyzer main.py
 ```
 
-ビルド成功後、`dist\VSM_Analyzer.exe` が生成される。
+ビルド成功後、`main.dist\VSM_Analyzer.exe` が生成される。
 
 ## テストの実行
 
@@ -217,4 +217,4 @@ pytest -v
 
 - **グラフ上でのインタラクティブな範囲指定**: 反磁性補正の磁場範囲や $M_s$ 計算範囲を、数値入力ではなくグラフ上のマウスドラッグで直感的に指定できる操作性の実現。
 - **総合的な材料解析プラットフォームへの拡張**: 現在のVSM（$M-H$カーブ）解析に加え、X線回折（XRD）や磁化の温度依存性（$M-T$カーブ）など、異なる測定手法のデータも管理・比較できるソフトウェアへの進化。
-- **CI/CDパイプラインの構築**: GitHub Actionsを導入し、`pytest` の自動実行・静的コード解析、および PyInstaller を用いた実行ファイルの自動ビルド・リリース体制を構築。
+- **CI/CDパイプラインの構築**: GitHub Actionsを導入し、`pytest` の自動実行・静的コード解析、および Nuitka を用いた実行ファイルの自動ビルド・リリース体制を構築。
