@@ -231,3 +231,114 @@ def calculate_saturation_magnetization(
 
     print(f"  飽和磁化 Ms: {Ms_avg:.3f} kA/m (正側: {Ms_pos:.3f}, 負側: {Ms_neg:.3f})")
     return {"avg": Ms_avg, "pos": Ms_pos, "neg": Ms_neg}
+
+
+def calculate_saturation_field(
+    H_down: Any,
+    M_down: Any,
+    H_up: Any,
+    M_up: Any,
+    Ms: float,
+    tolerance_pct: float = 2.0,
+    min_consecutive: int = 3,
+) -> Optional[Dict[str, float]]:
+    """
+    飽和磁場(Hs)を計算します。
+
+    正側(降磁場ブランチのH>0領域)と負側(昇磁場ブランチのH<0領域)で
+    別々に算出し、平均を返します。
+
+    アルゴリズム:
+        |H|昇順でスキャンし、|M| < (1-ε)*Ms となる点が
+        min_consecutive点以上連続する「最後のまとまり」の直後の点の|H|を Hs とする。
+        連続性条件により高磁場側の孤立した外れ値を無視できる。
+
+    Args:
+        H_down: 往路の磁場データ（正Hmaxから負Hmaxへ）
+        M_down: 往路の磁化データ
+        H_up: 復路の磁場データ（負Hmaxから正Hmaxへ）
+        M_up: 復路の磁化データ
+        Ms: 飽和磁化 (kA/m)
+        tolerance_pct: 許容誤差 (%)。Ms*(1-tolerance_pct/100) を閾値とする
+        min_consecutive: 連続して閾値以下である必要な最小点数
+
+    Returns:
+        {'T', 'Oe', 'pos', 'neg'} をキーとする辞書。計算失敗時は None。
+    """
+    if Ms <= 0:
+        return None
+
+    threshold = (1.0 - tolerance_pct / 100.0) * Ms
+
+    def _find_hs_branch(H_branch: np.ndarray, M_branch: np.ndarray) -> Optional[float]:
+        abs_H = np.abs(H_branch)
+        sort_idx = np.argsort(abs_H)
+        abs_H_sorted = abs_H[sort_idx]
+        abs_M_sorted = np.abs(M_branch[sort_idx])
+
+        n = len(abs_H_sorted)
+        if n < min_consecutive:
+            return None
+
+        below = abs_M_sorted < threshold
+
+        # |H|昇順に走査し、連続 min_consecutive 点以上の below-threshold ランの
+        # 最後のもの（最も高|H|側）の末端インデックスを記録する
+        last_run_end = -1
+        run_len = 0
+        for i in range(n):
+            if below[i]:
+                run_len += 1
+                if run_len >= min_consecutive:
+                    last_run_end = i
+            else:
+                run_len = 0
+
+        if last_run_end == -1:
+            # 連続した below-threshold ランなし → 最低磁場から飽和とみなす
+            return float(abs_H_sorted[0])
+
+        next_idx = last_run_end + 1
+        if next_idx >= n:
+            # 測定範囲内で飽和に到達しなかった
+            return None
+
+        return float(abs_H_sorted[next_idx])
+
+    try:
+        H_down_np = np.asarray(H_down, dtype=float)
+        M_down_np = np.asarray(M_down, dtype=float)
+        H_up_np = np.asarray(H_up, dtype=float)
+        M_up_np = np.asarray(M_up, dtype=float)
+
+        # 正側: 降磁場ブランチの H > 0 領域
+        pos_mask = H_down_np > 0
+        Hs_pos: Optional[float] = None
+        if np.sum(pos_mask) >= min_consecutive:
+            Hs_pos = _find_hs_branch(H_down_np[pos_mask], M_down_np[pos_mask])
+
+        # 負側: 昇磁場ブランチの H < 0 領域
+        neg_mask = H_up_np < 0
+        Hs_neg: Optional[float] = None
+        if np.sum(neg_mask) >= min_consecutive:
+            Hs_neg = _find_hs_branch(H_up_np[neg_mask], M_up_np[neg_mask])
+
+        if Hs_pos is not None and Hs_neg is not None:
+            Hs_avg = (Hs_pos + Hs_neg) / 2.0
+        elif Hs_pos is not None:
+            Hs_avg = Hs_pos
+        elif Hs_neg is not None:
+            Hs_avg = Hs_neg
+        else:
+            return None
+
+        return {
+            "T": Hs_avg,
+            "Oe": Hs_avg * 10000.0,
+            "pos": Hs_pos,
+            "neg": Hs_neg,
+        }
+
+    except Exception as e:
+        print(f"  エラー: 飽和磁場の計算失敗: {e}")
+        return None

@@ -153,3 +153,22 @@ class AnalysisTab:
             state=tk.DISABLED,
         )
         self.ms_settings_button.pack(fill=tk.X, pady=5)
+
+        # --- 飽和磁場 (Hs) 計算フレーム ---
+        hs_section, hs_frame = theme.make_section(parent, "飽和磁場 (Hs) 計算")
+        hs_section.pack(fill=tk.X, pady=(0, 10))
+        hs_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(hs_frame, text="許容範囲 (%):").grid(
+            row=0, column=0, sticky="w", pady=(0, 5)
+        )
+        ttk.Entry(
+            hs_frame, textvariable=self.app.state.hs_tolerance_var, width=8
+        ).grid(row=0, column=1, sticky="ew", padx=5, pady=(0, 5))
+
+        ttk.Label(hs_frame, text="連続点数 (最小):").grid(
+            row=1, column=0, sticky="w"
+        )
+        ttk.Entry(
+            hs_frame, textvariable=self.app.state.hs_min_consecutive_var, width=8
+        ).grid(row=1, column=1, sticky="ew", padx=5)

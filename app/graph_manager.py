@@ -373,6 +373,7 @@ class GraphManager:
                     "Ms": None,
                     "Mr": None,
                     "Hc_Oe": None,
+                    "Hs_Oe": None,
                     "squareness": None,
                 }
 
@@ -425,6 +426,24 @@ class GraphManager:
                 Hc_results = vsm_logic.calculate_coercivity(H_down, M_down, H_up, M_up)
                 if Hc_results:
                     file_results["Hc_Oe"] = Hc_results.get("Oe")
+
+                if file_results["Ms"] is not None and file_results["Ms"] > 0:
+                    try:
+                        hs_tol = float(self.app.state.hs_tolerance_var.get())
+                        hs_n = max(1, int(self.app.state.hs_min_consecutive_var.get()))
+                    except ValueError:
+                        hs_tol, hs_n = 2.0, 3
+                    Hs_results = vsm_logic.calculate_saturation_field(
+                        H_down, M_down, H_up, M_up,
+                        Ms=file_results["Ms"],
+                        tolerance_pct=hs_tol,
+                        min_consecutive=hs_n,
+                    )
+                    if Hs_results:
+                        file_results["Hs_Oe"] = Hs_results.get("Oe")
+                        pos_str = f"{Hs_results['pos']:.4f}" if Hs_results.get("pos") is not None else "N/A"
+                        neg_str = f"{Hs_results['neg']:.4f}" if Hs_results.get("neg") is not None else "N/A"
+                        print(f"  飽和磁場 Hs: {Hs_results['T']:.4f} T ({Hs_results['Oe']:.2f} Oe) [正: {pos_str} T, 負: {neg_str} T]")
 
                 if (
                     Mr_avg is not None

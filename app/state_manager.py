@@ -49,6 +49,11 @@ class StateManager:
         self.grid_style_var: tk.StringVar = tk.StringVar(value=":")
         self.grid_color_var: tk.StringVar = tk.StringVar(value="#CCCCCC")
 
+        # --- 飽和磁場 (Hs) 計算パラメータ ---
+        self.hs_tolerance_var: tk.StringVar = tk.StringVar(value="2.0")
+        self.hs_min_consecutive_var: tk.StringVar = tk.StringVar(value="3")
+        self.field_unit_var: tk.StringVar = tk.StringVar(value="mT")  # "mT" or "Oe" (Hc・Hs共用)
+
     def to_dict(self) -> Dict[str, Any]:
         """
         現在の状態を辞書に変換して返します。

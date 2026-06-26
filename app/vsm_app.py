@@ -549,6 +549,8 @@ class VSMApp:
             self.state.y_format_cgs_var,
             self.state.y_format_norm_var,
             self.state.unit_mode_var,
+            self.state.hs_tolerance_var,
+            self.state.hs_min_consecutive_var,
         ]
         for var in trace_vars:
             var.trace_add("write", self._schedule_update)
@@ -962,7 +964,7 @@ class VSMApp:
         frame.pack(expand=True, fill="both")
 
         # --- Treeview (Table) ---
-        columns = ("filename", "ms", "mr", "hc", "sq")  # 列の定義
+        columns = ("filename", "ms", "mr", "hc", "hs", "sq")  # 列の定義
         # selectmode="extended" を追加して複数行選択を可能にする
         self.results_tree = ttk.Treeview(
             frame, columns=columns, show="headings", selectmode="extended"
@@ -973,7 +975,8 @@ class VSMApp:
             "filename": "ファイル名",
             "ms": "飽和磁化 Ms (kA/m)",
             "mr": "残留磁化 Mr (kA/m)",
-            "hc": "保磁力 Hc (Oe)",
+            "hc": "保磁力 Hc (mT)",
+            "hs": "飽和磁場 Hs (mT)",
             "sq": "角形比 (S = Mr/Ms)",
         }
         for col, label in self._col_labels.items():
@@ -986,6 +989,7 @@ class VSMApp:
         self.results_tree.column("ms", anchor="e", width=150)
         self.results_tree.column("mr", anchor="e", width=150)
         self.results_tree.column("hc", anchor="e", width=120)
+        self.results_tree.column("hs", anchor="e", width=120)
         self.results_tree.column("sq", anchor="e", width=150)
 
         # Scrollbars
@@ -1017,6 +1021,40 @@ class VSMApp:
             command=self._copy_results_as_html,
         ).pack(side="left", padx=5)
 
+        self._hs_unit_button = theme.secondary_button(
+            button_frame,
+            text="Hc/Hs単位: mT → Oe",
+            command=self._toggle_hs_unit,
+        )
+        self._hs_unit_button.pack(side="left", padx=5)
+
+    def _format_field(self, val_oe: Optional[float], empty_on_none: bool = False) -> str:
+        """Oe単位の磁場値をfield_unit_varに応じてmTまたはOeの文字列に変換する。"""
+        if val_oe is None:
+            return "" if empty_on_none else "N/A"
+        if self.state.field_unit_var.get() == "mT":
+            return f"{val_oe * 0.1:.2f}"
+        return f"{val_oe:.2f}"
+
+    def _toggle_hs_unit(self) -> None:
+        """Hc・Hs表示単位をmT/Oeで切り替え、テーブルヘッダーと表示を更新する。"""
+        if self.state.field_unit_var.get() == "mT":
+            self.state.field_unit_var.set("Oe")
+            self._hs_unit_button.config(text="Hc/Hs単位: Oe → mT")
+        else:
+            self.state.field_unit_var.set("mT")
+            self._hs_unit_button.config(text="Hc/Hs単位: mT → Oe")
+        unit = self.state.field_unit_var.get()
+        self._col_labels["hc"] = f"保磁力 Hc ({unit})"
+        self._col_labels["hs"] = f"飽和磁場 Hs ({unit})"
+        for col in ("hc", "hs"):
+            self.results_tree.heading(
+                col,
+                text=self._col_labels[col],
+                command=lambda c=col: self._sort_column(c),
+            )
+        self._update_results_table()
+
     def _update_results_table(self) -> None:
         """解析結果テーブルを最新のデータでクリアおよび再描画します。"""
         # Clear existing data
@@ -1030,13 +1068,14 @@ class VSMApp:
         for idx, res in enumerate(self.analysis_results):
             ms_str = f"{res['Ms']:.1f}" if res["Ms"] is not None else "N/A"
             mr_str = f"{res['Mr']:.1f}" if res["Mr"] is not None else "N/A"
-            hc_str = f"{res['Hc_Oe']:.1f}" if res["Hc_Oe"] is not None else "N/A"
+            hc_str = self._format_field(res.get("Hc_Oe"))
+            hs_str = self._format_field(res.get("Hs_Oe"))
             sq_str = (
                 f"{res['squareness']:.3f}" if res["squareness"] is not None else "N/A"
             )
             tag = "evenrow" if idx % 2 == 0 else "oddrow"
             self.results_tree.insert(
-                "", "end", values=(tex_to_display(res["filename"]), ms_str, mr_str, hc_str, sq_str),
+                "", "end", values=(tex_to_display(res["filename"]), ms_str, mr_str, hc_str, hs_str, sq_str),
                 tags=(tag,),
             )
 
@@ -1070,11 +1109,13 @@ class VSMApp:
 
         try:
             # ヘッダー行を作成
+            field_unit = self.state.field_unit_var.get()
             headers = [
                 "ファイル名",
                 "飽和磁化 Ms (kA/m)",
                 "残留磁化 Mr (kA/m)",
-                "保磁力 Hc (Oe)",
+                f"保磁力 Hc ({field_unit})",
+                f"飽和磁場 Hs ({field_unit})",
                 "角形比 (S = Mr/Ms)",
             ]
             tsv_data_lines = ["\t".join(headers)]
@@ -1094,13 +1135,14 @@ class VSMApp:
                 for res in self.analysis_results:
                     ms_str = f"{res['Ms']:.1f}" if res["Ms"] is not None else ""
                     mr_str = f"{res['Mr']:.1f}" if res["Mr"] is not None else ""
-                    hc_str = f"{res['Hc_Oe']:.1f}" if res["Hc_Oe"] is not None else ""
+                    hc_str = self._format_field(res.get("Hc_Oe"), empty_on_none=True)
+                    hs_str = self._format_field(res.get("Hs_Oe"), empty_on_none=True)
                     sq_str = (
                         f"{res['squareness']:.3f}"
                         if res["squareness"] is not None
                         else ""
                     )
-                    row = [tex_to_display(res["filename"]), ms_str, mr_str, hc_str, sq_str]
+                    row = [tex_to_display(res["filename"]), ms_str, mr_str, hc_str, hs_str, sq_str]
                     tsv_data_lines.append("\t".join(row))
                 message_suffix = "すべての解析結果をクリップボードにコピーしました。"
 
@@ -1123,11 +1165,13 @@ class VSMApp:
         try:
             import win32clipboard
 
+            field_unit = self.state.field_unit_var.get()
             headers = [
                 "ファイル名",
                 "飽和磁化 Ms (kA/m)",
                 "残留磁化 Mr (kA/m)",
-                "保磁力 Hc (Oe)",
+                f"保磁力 Hc ({field_unit})",
+                f"飽和磁場 Hs ({field_unit})",
                 "角形比 (S = Mr/Ms)",
             ]
 
