@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import Sidebar from "./components/Sidebar";
 import Graph from "./components/Graph";
@@ -19,13 +20,37 @@ const DEFAULT_PARAMS: AnalysisParams = {
   area:             100,
   demagMode:       "auto",
   offsetCorrection: false,
+  hsTolerance:      2.0,
+  hsMinConsecutive: 3,
 };
 
 function App() {
-  const [entries,   setEntries]   = useState<FileEntry[]>([]);
-  const [params,    setParams]    = useState<AnalysisParams>(DEFAULT_PARAMS);
-  const [unitMode,  setUnitMode]  = useState<UnitMode>("SI");
-  const [fieldUnit, setFieldUnit] = useState<"mT" | "Oe">("mT");
+  const [entries,        setEntries]        = useState<FileEntry[]>([]);
+  const [params,         setParams]         = useState<AnalysisParams>(DEFAULT_PARAMS);
+  const [unitMode,       setUnitMode]       = useState<UnitMode>("SI");
+  const [fieldUnit,      setFieldUnit]      = useState<"mT" | "Oe">("mT");
+  const [backendStatus,  setBackendStatus]  = useState<"starting" | "ready" | "error">("starting");
+
+  // アプリ起動時にバックエンドを自動起動（失敗しても手動起動済みなら接続確認）
+  useEffect(() => {
+    invoke("start_backend").catch(() => { /* 手動起動済みの場合は無視 */ });
+
+    // 自動/手動どちらでもバックエンドが応答するまでポーリング
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch("http://localhost:8000/health");
+        if (res.ok) {
+          setBackendStatus("ready");
+          clearInterval(poll);
+        }
+      } catch { /* まだ起動中 */ }
+    }, 500);
+    // 15秒でタイムアウト
+    setTimeout(() => {
+      clearInterval(poll);
+      setBackendStatus((s) => s === "ready" ? "ready" : "error");
+    }, 15000);
+  }, []);
 
   // ファイルを解析してエントリを更新
   const runAnalysis = useCallback(
@@ -107,6 +132,14 @@ function App() {
           <span className="text-sm font-semibold text-zinc-200">VSM Data Analyzer</span>
           <span className="ml-3 text-xs text-zinc-500">
             {entries.length === 0 ? "ファイル未読み込み" : `${entries.length} ファイル`}
+          </span>
+          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
+            backendStatus === "ready"    ? "bg-green-900 text-green-300" :
+            backendStatus === "error"    ? "bg-red-900 text-red-300" :
+                                           "bg-zinc-800 text-zinc-400 animate-pulse"
+          }`}>
+            {backendStatus === "ready" ? "● API 接続中" :
+             backendStatus === "error" ? "● API エラー" : "● API 起動中..."}
           </span>
         </header>
         <Graph entries={entries} unitMode={unitMode} />

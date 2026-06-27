@@ -19,6 +19,8 @@ async def analyze_file(
     area: float = Form(100.0),              # mm²
     demag_mode: str = Form("auto"),         # "auto" | "none"
     offset_correction: bool = Form(False),
+    hs_tolerance: float = Form(2.0),        # Hs 許容範囲 (%)
+    hs_min_consecutive: int = Form(3),      # Hs 最小連続点数
 ):
     suffix = Path(file.filename or "data.VSM").suffix
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -79,7 +81,8 @@ async def analyze_file(
         Hc_Oe      = Hc_result.get("Oe")  if Hc_result else None
 
         Hs_result  = vsm_logic.calculate_saturation_field(
-            H_down, M_down, H_up, M_up, Ms=Ms or 0
+            H_down, M_down, H_up, M_up, Ms=Ms or 0,
+            tolerance_pct=hs_tolerance, min_consecutive=hs_min_consecutive,
         ) if Ms else None
         Hs_Oe      = Hs_result.get("Oe")  if Hs_result else None
 

@@ -166,16 +166,20 @@ export default function Sidebar({
       {/* 飽和磁場 */}
       <section className="p-4">
         <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">飽和磁場 (Hs)</h2>
-        <div className="mb-2">
-          <label className="text-xs text-zinc-400 block mb-1">許容範囲 (%)</label>
-          <input type="number" defaultValue="2.0" step="0.1"
-            className="w-full bg-zinc-800 border border-zinc-600 text-zinc-100 text-sm rounded-md px-2 py-1.5" />
-        </div>
-        <div>
-          <label className="text-xs text-zinc-400 block mb-1">連続点数 (最小)</label>
-          <input type="number" defaultValue="3" min="1"
-            className="w-full bg-zinc-800 border border-zinc-600 text-zinc-100 text-sm rounded-md px-2 py-1.5" />
-        </div>
+        <NumberInput
+          label="許容範囲 (%)"
+          value={params.hsTolerance}
+          step={0.5}
+          min={0.1}
+          onChange={(v) => onParamsChange({ hsTolerance: v })}
+        />
+        <NumberInput
+          label="連続点数 (最小)"
+          value={params.hsMinConsecutive}
+          step={1}
+          min={1}
+          onChange={(v) => onParamsChange({ hsMinConsecutive: Math.round(v) })}
+        />
       </section>
     </aside>
   );

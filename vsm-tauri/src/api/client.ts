@@ -22,6 +22,8 @@ export interface AnalysisParams {
   area:              number;   // mm²
   demagMode:        "auto" | "none";
   offsetCorrection:  boolean;
+  hsTolerance:       number;   // %
+  hsMinConsecutive:  number;
 }
 
 export async function analyzeFile(
@@ -32,8 +34,10 @@ export async function analyzeFile(
   form.append("file", file);
   form.append("thickness",         String(params.thickness));
   form.append("area",              String(params.area));
-  form.append("demag_mode",        params.demagMode);
-  form.append("offset_correction", String(params.offsetCorrection));
+  form.append("demag_mode",          params.demagMode);
+  form.append("offset_correction",   String(params.offsetCorrection));
+  form.append("hs_tolerance",        String(params.hsTolerance));
+  form.append("hs_min_consecutive",  String(params.hsMinConsecutive));
 
   const res = await fetch(`${BASE}/api/analyze`, { method: "POST", body: form });
   if (!res.ok) {

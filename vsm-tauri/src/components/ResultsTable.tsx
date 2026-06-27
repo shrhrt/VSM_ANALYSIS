@@ -11,8 +11,44 @@ function fmt(v: number | null | undefined, digits: number, scale = 1): string {
   return (v * scale).toFixed(digits);
 }
 
+const HEADERS = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", "Hc", "Hs", "角形比 (Mr/Ms)"];
+
 export default function ResultsTable({ entries, fieldUnit, onToggleUnit }: Props) {
-  const scale = fieldUnit === "mT" ? 0.1 : 1;  // Oe → mT は ×0.1
+  const scale = fieldUnit === "mT" ? 0.1 : 1;
+
+  const headers = HEADERS.map((h, i) =>
+    i === 3 ? `Hc (${fieldUnit})` : i === 4 ? `Hs (${fieldUnit})` : h
+  );
+
+  const rows = entries.map((e) => [
+    e.file.name,
+    fmt(e.result?.Ms,  1),
+    fmt(e.result?.Mr,  1),
+    fmt(e.result?.Hc_Oe, 2, scale),
+    fmt(e.result?.Hs_Oe, 2, scale),
+    fmt(e.result?.squareness, 3),
+  ]);
+
+  const copyText = () => {
+    const lines = [
+      headers.join("\t"),
+      ...rows.map((r) => r.join("\t")),
+    ];
+    navigator.clipboard.writeText(lines.join("\n"));
+  };
+
+  const copyTable = () => {
+    const colWidths = headers.map((h, ci) =>
+      Math.max(h.length, ...rows.map((r) => r[ci].length))
+    );
+    const pad = (s: string, w: number) => s.padEnd(w);
+    const sep = colWidths.map((w) => "-".repeat(w)).join("-+-");
+    const header = colWidths.map((w, i) => pad(headers[i], w)).join(" | ");
+    const body = rows.map((r) =>
+      colWidths.map((w, i) => pad(r[i], w)).join(" | ")
+    );
+    navigator.clipboard.writeText([header, sep, ...body].join("\n"));
+  };
 
   return (
     <div className="h-44 bg-zinc-900 border-t border-zinc-700 flex flex-col shrink-0">
@@ -20,10 +56,12 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit }: Props
       <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-700 shrink-0">
         <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">解析結果</span>
         <div className="ml-auto flex gap-2">
-          <button className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-3 py-1 rounded transition-colors">
+          <button onClick={copyText}
+            className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-3 py-1 rounded transition-colors">
             テキストコピー
           </button>
-          <button className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-3 py-1 rounded transition-colors">
+          <button onClick={copyTable}
+            className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-3 py-1 rounded transition-colors">
             表コピー
           </button>
           <button onClick={onToggleUnit}
@@ -38,16 +76,11 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit }: Props
         <table className="w-full text-sm text-zinc-300 border-collapse">
           <thead>
             <tr className="bg-zinc-800 sticky top-0">
-              {[
-                { label: "ファイル名",         align: "text-left"  },
-                { label: "Ms (kA/m)",          align: "text-right" },
-                { label: "Mr (kA/m)",          align: "text-right" },
-                { label: `Hc (${fieldUnit})`,  align: "text-right" },
-                { label: `Hs (${fieldUnit})`,  align: "text-right" },
-                { label: "角形比 (Mr/Ms)",     align: "text-right" },
-              ].map((h) => (
-                <th key={h.label} className={`px-4 py-2 text-xs font-medium text-zinc-400 ${h.align} whitespace-nowrap`}>
-                  {h.label}
+              {headers.map((h) => (
+                <th key={h} className={`px-4 py-2 text-xs font-medium text-zinc-400 whitespace-nowrap ${
+                  h === "ファイル名" ? "text-left" : "text-right"
+                }`}>
+                  {h}
                 </th>
               ))}
             </tr>
