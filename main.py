@@ -32,4 +32,7 @@ if __name__ == "__main__":
         root.iconbitmap(icon_path)
 
     app = VSMApp(root)
-    root.mainloop()
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        pass
