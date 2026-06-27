@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { UnitMode, GraphSettings } from "../App";
+import type { FileWithPath } from "../api/client";
+import { openVSMFiles } from "../api/client";
 import type { ExportOptions } from "../utils/graphExport";
 
 interface Props {
   hasEntries:      boolean;
   unitMode:        UnitMode;
   graphSettings:   GraphSettings;
-  onOpenFiles:     (files: File[]) => void;
-  onAddFiles:      (files: File[]) => void;
+  onOpenFiles:     (files: FileWithPath[]) => void;
+  onAddFiles:      (files: FileWithPath[]) => void;
   onClearAll:      () => void;
   onSaveSession:   () => Promise<boolean>;
-  onLoadSession:   (file: File) => void;
+  onLoadSession:   () => void;
   onUnitMode:      (m: UnitMode) => void;
   onGraphSettings: (p: Partial<GraphSettings>) => void;
   onSaveGraph:     (opts: ExportOptions) => Promise<boolean>;
@@ -100,29 +102,17 @@ export default function MenuBar({
   onUnitMode, onGraphSettings,
   onSaveGraph, onCopyGraph,
 }: Props) {
-  const openRef   = useRef<HTMLInputElement>(null);
-  const addRef    = useRef<HTMLInputElement>(null);
-  const sessionRef = useRef<HTMLInputElement>(null);
-
-  const pick = (ref: React.RefObject<HTMLInputElement | null>, cb: (f: File[]) => void) => {
-    ref.current?.click();
-    const handler = () => {
-      const files = Array.from(ref.current?.files ?? []);
-      if (files.length) cb(files);
-      ref.current!.value = "";
-      ref.current!.removeEventListener("change", handler);
-    };
-    ref.current?.addEventListener("change", handler);
-  };
+  const pickOpen = async () => { const f = await openVSMFiles(true); if (f.length) onOpenFiles(f); };
+  const pickAdd  = async () => { const f = await openVSMFiles(true); if (f.length) onAddFiles(f); };
 
   const fileMenu: MenuItem[] = [
-    { kind: "act",  label: "開く...",            onClick: () => pick(openRef, onOpenFiles) },
-    { kind: "act",  label: "ファイルを追加...",   onClick: () => pick(addRef, onAddFiles) },
+    { kind: "act",  label: "開く...",                disabled: false,      onClick: pickOpen },
+    { kind: "act",  label: "ファイルを追加...",                             onClick: pickAdd },
     { kind: "sep" },
-    { kind: "act",  label: "セッションを保存...", disabled: !hasEntries, onClick: onSaveSession },
-    { kind: "act",  label: "セッションを読み込み...", onClick: () => pick(sessionRef, (f) => onLoadSession(f[0])) },
+    { kind: "act",  label: "セッションを保存...",    disabled: !hasEntries, onClick: onSaveSession },
+    { kind: "act",  label: "セッションを読み込み...",                       onClick: onLoadSession },
     { kind: "sep" },
-    { kind: "act",  label: "すべてクリア",        disabled: !hasEntries, onClick: onClearAll },
+    { kind: "act",  label: "すべてクリア",           disabled: !hasEntries, onClick: onClearAll },
   ];
 
   const viewMenu: MenuItem[] = [
@@ -148,11 +138,6 @@ export default function MenuBar({
 
   return (
     <div className="h-8 shrink-0 bg-zinc-900 border-b border-zinc-800 flex items-center px-2 gap-0.5 select-none">
-      {/* 隠し input */}
-      <input ref={openRef}   type="file" accept=".VSM,.vsm,.dat" multiple className="hidden" />
-      <input ref={addRef}    type="file" accept=".VSM,.vsm,.dat" multiple className="hidden" />
-      <input ref={sessionRef} type="file" accept=".vsm_session"  className="hidden" />
-
       <MenuButton label="ファイル" items={fileMenu} />
       <MenuButton label="表示"     items={viewMenu} />
       <MenuButton label="グラフ"   items={graphMenu} />

@@ -8,18 +8,24 @@ import Graph from "./components/Graph";
 import ResultsTable from "./components/ResultsTable";
 import StatusBar from "./components/StatusBar";
 import MenuBar from "./components/MenuBar";
-import { analyzeFile, AnalysisResult, AnalysisParams, FileCalcSettings } from "./api/client";
+import MissingFilesDialog from "./components/MissingFilesDialog";
+import {
+  analyzeFile, AnalysisResult, AnalysisParams, FileCalcSettings, FileWithPath,
+  openSessionFilePicker, getSessionEnv, resolveSessionPaths, pathToFileWithPath,
+} from "./api/client";
 import { downloadGraphImage, copyGraphToClipboard } from "./utils/graphExport";
+import { computeRelativePath, computeOnedrivePath } from "./utils/sessionPaths";
 import type { ExportOptions } from "./utils/graphExport";
 
 export type FileEntry = {
   file:          File;
+  filePath:      string;        // Tauri ダイアログで開いた絶対パス（空文字 = 不明）
   result:        AnalysisResult | null;
   error:         string | null;
   loading:       boolean;
   color:         string;
   legendName?:   string;
-  markerSymbol?: string;       // per-file マーカー形状
+  markerSymbol?: string;
   calcSettings?: FileCalcSettings;
 };
 
@@ -62,6 +68,25 @@ export const FILE_COLORS = [
   "#8b5cf6", "#06b6d4", "#f97316", "#84cc16",
 ];
 
+// セッションファイルの内部型 (バージョン問わず共通)
+type SessionEntryV1 = {
+  filename: string; color: string; legendName?: string; markerSymbol?: string;
+  calcSettings?: FileCalcSettings; fileData: string;
+};
+type SessionEntryV2 = {
+  filename: string; color: string; legendName?: string; markerSymbol?: string;
+  calcSettings?: FileCalcSettings;
+  absolutePath: string; relativePath: string; onedrivePath: string;
+};
+type SessionData = {
+  version?: number;
+  params: AnalysisParams;
+  graphSettings?: GraphSettings;
+  unitMode?: string;
+  fieldUnit?: string;
+  entries: (SessionEntryV1 | SessionEntryV2)[];
+};
+
 const DEFAULT_PARAMS: AnalysisParams = {
   thickness: 30, area: 90,
   demagMode: "auto", offsetCorrection: false,
@@ -82,22 +107,6 @@ const DEFAULT_GRAPH: GraphSettings = {
   paperMode: false, paperColorScheme: "journal",
 };
 
-// ファイルをBase64文字列に変換
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const buf = reader.result as ArrayBuffer;
-      const bytes = new Uint8Array(buf);
-      let binary = "";
-      for (const b of bytes) binary += String.fromCharCode(b);
-      resolve(btoa(binary));
-    };
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
-  });
-}
-
 function App() {
   const [entries,       setEntries]       = useState<FileEntry[]>([]);
   const [params,        setParams]        = useState<AnalysisParams>(DEFAULT_PARAMS);
@@ -105,6 +114,14 @@ function App() {
   const [fieldUnit,     setFieldUnit]     = useState<"mT" | "Oe">("mT");
   const [graphSettings, setGraphSettings] = useState<GraphSettings>(DEFAULT_GRAPH);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("starting");
+
+  // 欠損ファイルダイアログ用の保留セッション
+  const [missingDialog, setMissingDialog] = useState<{
+    missing: string[];
+    session: SessionData;
+    sessionPath: string;
+    foundMap: Map<string, string>;
+  } | null>(null);
 
   useEffect(() => {
     invoke("start_backend").catch(() => {});
@@ -127,19 +144,20 @@ function App() {
     return () => clearInterval(poll);
   }, []);
 
-  const runAnalysis = useCallback(async (files: File[], replace: boolean) => {
+  const runAnalysis = useCallback(async (items: FileWithPath[], replace: boolean) => {
     setEntries((prev) => {
       const base = replace ? [] : prev;
-      const added: FileEntry[] = files.map((f, i) => ({
-        file: f, result: null, error: null, loading: true,
+      const added: FileEntry[] = items.map((item, i) => ({
+        file: item.file, filePath: item.path,
+        result: null, error: null, loading: true,
         color: FILE_COLORS[(base.length + i) % FILE_COLORS.length],
       }));
       return [...base, ...added];
     });
 
     const results = await Promise.all(
-      files.map((f) =>
-        analyzeFile(f, params)
+      items.map(({ file }) =>
+        analyzeFile(file, params)
           .then((r) => ({ result: r, error: null }))
           .catch((e: Error) => ({ result: null, error: e.message }))
       )
@@ -147,8 +165,8 @@ function App() {
 
     setEntries((prev) => {
       const next = [...prev];
-      const offset = replace ? 0 : next.length - files.length;
-      files.forEach((_f, i) => {
+      const offset = replace ? 0 : next.length - items.length;
+      items.forEach((_item, i) => {
         next[offset + i] = { ...next[offset + i], result: results[i].result, error: results[i].error, loading: false };
       });
       return next;
@@ -160,7 +178,7 @@ function App() {
       const merged = { ...prev, ...next };
       setEntries((cur) => {
         if (cur.length === 0) return cur;
-        const loading = cur.map((e) => ({ ...e, loading: true }));
+        const loading: FileEntry[] = cur.map((e) => ({ ...e, loading: true }));
         Promise.all(
           cur.map((e) =>
             analyzeFile(e.file, merged, e.calcSettings)
@@ -232,82 +250,163 @@ function App() {
     await copyGraphToClipboard(scale);
   }, []);
 
-  // セッション保存 (.vsm_session)
+  // ── セッション保存 (v2: パス参照方式) ─────────────────────────
   const saveSession = useCallback(async (): Promise<boolean> => {
     if (entries.length === 0) return false;
-    const entriesData = await Promise.all(entries.map(async (e) => ({
-      filename:     e.file.name,
-      color:        e.color,
-      legendName:   e.legendName,
-      markerSymbol: e.markerSymbol,
-      calcSettings: e.calcSettings,
-      fileData:     await toBase64(e.file),
-    })));
-
-    const json = JSON.stringify({
-      version: 1,
-      savedAt: new Date().toISOString(),
-      params,
-      graphSettings,
-      unitMode,
-      fieldUnit,
-      entries: entriesData,
-    }, null, 2);
 
     const defaultName = `session_${new Date().toISOString().slice(0, 10)}.vsm_session`;
-    const filePath = await save({
+    const savePath = await save({
       defaultPath: defaultName,
       filters: [{ name: "VSM Session", extensions: ["vsm_session"] }],
     });
-    if (!filePath) return false; // キャンセル
+    if (!savePath) return false;
 
-    await writeTextFile(filePath, json);
-    return true;
-  }, [entries, params, graphSettings, unitMode, fieldUnit]);
+    let sessionEnv: { onedrive_commercial: string; onedrive: string } | null = null;
+    try { sessionEnv = await getSessionEnv(); } catch { /* バックエンド未起動時は無視 */ }
 
-  // セッション読み込み
-  const loadSession = useCallback(async (file: File) => {
-    const text    = await file.text();
-    const session = JSON.parse(text);
-
-    const restoredEntries: FileEntry[] = session.entries.map((e: {
-      filename: string; color: string; legendName?: string; markerSymbol?: string;
-      calcSettings?: FileCalcSettings; fileData: string;
-    }, i: number) => {
-      const binary = atob(e.fileData);
-      const bytes  = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      const vsFile = new File([bytes], e.filename);
+    const entriesData = entries.map((e) => {
+      const absPath = e.filePath;
+      let relPath = "";
+      let odPath  = "";
+      if (absPath) {
+        relPath = computeRelativePath(savePath, absPath);
+        if (sessionEnv) {
+          odPath = computeOnedrivePath(absPath, sessionEnv.onedrive_commercial)
+                ?? computeOnedrivePath(absPath, sessionEnv.onedrive)
+                ?? "";
+        }
+      }
       return {
-        file: vsFile, result: null, error: null, loading: true,
-        color:        e.color ?? FILE_COLORS[i % FILE_COLORS.length],
+        filename:     e.file.name,
+        absolutePath: absPath,
+        relativePath: relPath,
+        onedrivePath: odPath,
+        color:        e.color,
         legendName:   e.legendName,
         markerSymbol: e.markerSymbol,
         calcSettings: e.calcSettings,
       };
     });
 
-    const restoredParams: AnalysisParams = session.params;
-    setParams(restoredParams);
-    setGraphSettings(session.graphSettings ?? DEFAULT_GRAPH);
-    setUnitMode(session.unitMode ?? "SI");
-    setFieldUnit(session.fieldUnit ?? "mT");
-    setEntries(restoredEntries);
+    await writeTextFile(savePath, JSON.stringify({
+      version: 2,
+      savedAt: new Date().toISOString(),
+      params, graphSettings, unitMode, fieldUnit,
+      entries: entriesData,
+    }, null, 2));
+    return true;
+  }, [entries, params, graphSettings, unitMode, fieldUnit]);
 
+  // ── v2 セッション適用 (パスから File を読み込んで解析) ─────────
+  const applySessionV2 = useCallback(async (
+    session: SessionData,
+    foundMap: Map<string, string>,
+  ) => {
+    const toLoad = (session.entries as SessionEntryV2[]).filter(
+      (e) => foundMap.has(e.filename)
+    );
+    const restoredEntries: FileEntry[] = await Promise.all(
+      toLoad.map(async (e, i) => {
+        const { file } = await pathToFileWithPath(foundMap.get(e.filename)!);
+        return {
+          file, filePath: foundMap.get(e.filename)!,
+          result: null, error: null, loading: true,
+          color:        e.color ?? FILE_COLORS[i % FILE_COLORS.length],
+          legendName:   e.legendName,
+          markerSymbol: e.markerSymbol,
+          calcSettings: e.calcSettings,
+        };
+      })
+    );
+    const rp: AnalysisParams = session.params;
+    setParams(rp);
+    setGraphSettings(session.graphSettings ?? DEFAULT_GRAPH);
+    setUnitMode((session.unitMode as UnitMode) ?? "SI");
+    setFieldUnit((session.fieldUnit as "mT" | "Oe") ?? "mT");
+    setEntries(restoredEntries);
     const results = await Promise.all(
       restoredEntries.map((e) =>
-        analyzeFile(e.file, restoredParams, e.calcSettings)
+        analyzeFile(e.file, rp, e.calcSettings)
           .then((r) => ({ result: r, error: null }))
           .catch((err: Error) => ({ result: null, error: err.message }))
       )
     );
-
     setEntries((prev) => prev.map((e, i) => ({
-      ...e,
-      result:  results[i].result,
-      error:   results[i].error,
-      loading: false,
+      ...e, result: results[i].result, error: results[i].error, loading: false,
     })));
   }, []);
+
+  // ── v1 セッション適用 (後方互換: Base64 埋め込み) ──────────────
+  const applySessionV1 = useCallback(async (session: SessionData) => {
+    const restoredEntries: FileEntry[] = (session.entries as SessionEntryV1[]).map((e, i) => {
+      const binary = atob(e.fileData ?? "");
+      const bytes  = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      return {
+        file: new File([bytes], e.filename), filePath: "",
+        result: null, error: null, loading: true,
+        color:        e.color ?? FILE_COLORS[i % FILE_COLORS.length],
+        legendName:   e.legendName,
+        markerSymbol: e.markerSymbol,
+        calcSettings: e.calcSettings,
+      };
+    });
+    const rp: AnalysisParams = session.params;
+    setParams(rp);
+    setGraphSettings(session.graphSettings ?? DEFAULT_GRAPH);
+    setUnitMode((session.unitMode as UnitMode) ?? "SI");
+    setFieldUnit((session.fieldUnit as "mT" | "Oe") ?? "mT");
+    setEntries(restoredEntries);
+    const results = await Promise.all(
+      restoredEntries.map((e) =>
+        analyzeFile(e.file, rp, e.calcSettings)
+          .then((r) => ({ result: r, error: null }))
+          .catch((err: Error) => ({ result: null, error: err.message }))
+      )
+    );
+    setEntries((prev) => prev.map((e, i) => ({
+      ...e, result: results[i].result, error: results[i].error, loading: false,
+    })));
+  }, []);
+
+  // ── セッション読み込みエントリーポイント ───────────────────────
+  const loadSession = useCallback(async () => {
+    const picked = await openSessionFilePicker();
+    if (!picked) return;
+
+    let session: SessionData;
+    try { session = JSON.parse(await picked.file.text()); }
+    catch { return; }
+
+    // v1 (Base64) 後方互換
+    if (!session.version || session.version < 2) {
+      await applySessionV1(session);
+      return;
+    }
+
+    // v2: パス解決
+    const metas = (session.entries as SessionEntryV2[]).map((e) => ({
+      filename:     e.filename     ?? "",
+      absolutePath: e.absolutePath ?? "",
+      relativePath: e.relativePath ?? "",
+      onedrivePath: e.onedrivePath ?? "",
+    }));
+    const { resolved, missing } = await resolveSessionPaths(picked.path, metas);
+    const foundMap = new Map(resolved.map((r) => [r.filename, r.resolved_path]));
+
+    if (missing.length > 0) {
+      setMissingDialog({ missing, session, sessionPath: picked.path, foundMap });
+    } else {
+      await applySessionV2(session, foundMap);
+    }
+  }, [applySessionV1, applySessionV2]);
+
+  // 欠損ファイルダイアログ: 確定
+  const handleMissingConfirm = useCallback(async (located: Map<string, string>) => {
+    if (!missingDialog) return;
+    const combined = new Map([...missingDialog.foundMap, ...located]);
+    setMissingDialog(null);
+    await applySessionV2(missingDialog.session, combined);
+  }, [missingDialog, applySessionV2]);
 
   // ── サイドバーリサイズ ──────────────────────────────────────
   const SIDEBAR_DEFAULT = 288;
@@ -340,6 +439,15 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden">
+      {/* 欠損ファイルダイアログ */}
+      {missingDialog && (
+        <MissingFilesDialog
+          missing={missingDialog.missing}
+          onConfirm={handleMissingConfirm}
+          onCancel={() => setMissingDialog(null)}
+        />
+      )}
+
       {/* メニューバー */}
       <MenuBar
         hasEntries={entries.length > 0}

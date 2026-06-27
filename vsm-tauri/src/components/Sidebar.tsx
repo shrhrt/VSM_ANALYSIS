@@ -1,7 +1,11 @@
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FileEntry, UnitMode, GraphSettings, PaperColorScheme } from "../App";
-import type { AnalysisParams, FileCalcSettings } from "../api/client";
+import type { AnalysisParams, FileCalcSettings, FileWithPath } from "../api/client";
+import { openVSMFiles } from "../api/client";
 import type { ExportOptions } from "../utils/graphExport";
+import { searchSuggestions, getCurrentToken } from "../utils/legendSuggestions";
+import type { Suggestion } from "../utils/legendSuggestions";
 
 // ── Props ──────────────────────────
 interface Props {
@@ -10,8 +14,8 @@ interface Props {
   params:                AnalysisParams;
   unitMode:              UnitMode;
   graphSettings:         GraphSettings;
-  onLoadFiles:           (files: File[]) => void;
-  onAddFiles:            (files: File[]) => void;
+  onLoadFiles:           (files: FileWithPath[]) => void;
+  onAddFiles:            (files: FileWithPath[]) => void;
   onClearAll:            () => void;
   onParamsChange:        (next: Partial<AnalysisParams>) => void;
   onUnitModeChange:      (mode: UnitMode) => void;
@@ -22,12 +26,97 @@ interface Props {
   onEntryMove:           (from: number, to: number) => void;
   onApplyFirstToAll:     () => void;
   onSaveSession:         () => Promise<boolean>;
-  onLoadSession:         (file: File) => void;
+  onLoadSession:         () => void;
   onSaveGraph:           (opts: ExportOptions) => Promise<boolean>;
   onCopyGraph:           (scale: number) => Promise<void>;
 }
 
 type Tab = "analysis" | "graph" | "save" | "log";
+
+// ── 凡例名オートコンプリート入力 ────────────────
+function LegendInput({ value, placeholder, onChange }: {
+  value: string; placeholder: string; onChange: (v: string) => void;
+}) {
+  const inputRef  = useRef<HTMLInputElement>(null);
+  const [sugs,     setSugs]     = useState<Suggestion[]>([]);
+  const [selIdx,   setSelIdx]   = useState(-1);
+  const [tokStart, setTokStart] = useState(0);
+  const [dropPos,  setDropPos]  = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const showDropdown = (matches: Suggestion[]) => {
+    if (matches.length === 0) { setSugs([]); setDropPos(null); return; }
+    const rect = inputRef.current?.getBoundingClientRect();
+    if (rect) setDropPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    setSugs(matches);
+  };
+
+  const updateSugs = (val: string, cursor: number) => {
+    const { token, start } = getCurrentToken(val, cursor);
+    setTokStart(start);
+    setSelIdx(-1);
+    showDropdown(searchSuggestions(token));
+  };
+
+  const accept = (s: Suggestion) => {
+    const cursor = inputRef.current?.selectionStart ?? value.length;
+    const newVal = value.slice(0, tokStart) + s.insert + value.slice(cursor);
+    onChange(newVal);
+    setSugs([]);
+    setDropPos(null);
+    setTimeout(() => {
+      const pos = tokStart + s.insert.length;
+      inputRef.current?.setSelectionRange(pos, pos);
+      inputRef.current?.focus();
+    }, 0);
+  };
+
+  const dropdown = sugs.length > 0 && dropPos && createPortal(
+    <div
+      style={{ position: "fixed", top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+      className="bg-zinc-800 border border-zinc-600 rounded shadow-2xl overflow-hidden"
+    >
+      {sugs.map((s, i) => (
+        <button
+          key={i}
+          onMouseDown={(e) => { e.preventDefault(); accept(s); }}
+          className={`w-full text-left flex items-center gap-2 px-2.5 py-1.5 text-xs transition-colors ${
+            i === selIdx ? "bg-indigo-700/60 text-white" : "text-zinc-300 hover:bg-zinc-700/60"
+          }`}
+        >
+          <span className="font-mono font-semibold text-zinc-100 shrink-0">{s.insert}</span>
+          <span className="text-zinc-500 text-[10px] truncate">{s.label}</span>
+        </button>
+      ))}
+    </div>,
+    document.body,
+  );
+
+  return (
+    <div className="flex-1 min-w-0">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => {
+          onChange(e.target.value);
+          updateSugs(e.target.value, e.target.selectionStart ?? e.target.value.length);
+        }}
+        onKeyDown={(e) => {
+          if (sugs.length === 0) return;
+          if (e.key === "ArrowDown")  { e.preventDefault(); setSelIdx((i) => Math.min(i + 1, sugs.length - 1)); }
+          else if (e.key === "ArrowUp")   { e.preventDefault(); setSelIdx((i) => Math.max(i - 1, -1)); }
+          else if ((e.key === "Enter" || e.key === "Tab") && selIdx >= 0) { e.preventDefault(); accept(sugs[selIdx]); }
+          else if (e.key === "Escape") { setSugs([]); setDropPos(null); }
+        }}
+        onBlur={() => setTimeout(() => { setSugs([]); setDropPos(null); }, 150)}
+        className="w-full bg-zinc-700/50 border border-zinc-600/50 text-zinc-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
+        title="凡例名（空欄=ファイル名）。TeX: $\alpha$ $\mu_0$ など"
+      />
+      {dropdown}
+    </div>
+  );
+}
 
 // ── 共通コンポーネント ──────────────────────────
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -148,11 +237,22 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
   const s = entry.calcSettings ?? {};
 
   const demagMode = s.perDemagMode ?? "";   // "" = グローバル設定
+  const demagLink = s.demagLinkRanges ?? true;
   const msManual  = s.msManual ?? false;
   const msLink    = s.msLinkRanges ?? true;
 
   const stemName = entry.file.name.replace(/\.[^.]+$/, "");
   const displayName = entry.legendName ?? "";
+
+  // 反磁性補正範囲連動: 正側が変わったら負側を自動ミラー
+  const setDemagPosMin = (v: string) => {
+    const n = parseFloat(v) || 0.5;
+    onCalcChange({ demagPosMin: n, ...(demagLink ? { demagNegMax: -n } : {}) });
+  };
+  const setDemagPosMax = (v: string) => {
+    const n = parseFloat(v) || 2.0;
+    onCalcChange({ demagPosMax: n, ...(demagLink ? { demagNegMin: -n } : {}) });
+  };
 
   // Ms範囲連動: 正側が変わったら負側も反転して更新
   const setMsPosMin = (v: string) => {
@@ -190,14 +290,11 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
           </button>
         </div>
 
-        {/* 凡例名入力 */}
-        <input
-          type="text"
+        {/* 凡例名入力（オートコンプリート付き） */}
+        <LegendInput
           value={displayName}
           placeholder={stemName}
-          onChange={(e) => onDisplayChange({ legendName: e.target.value })}
-          className="flex-1 min-w-0 bg-zinc-700/50 border border-zinc-600/50 text-zinc-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
-          title="凡例に表示する名前（空欄=ファイル名）"
+          onChange={(v) => onDisplayChange({ legendName: v })}
         />
 
         {/* ステータスドット */}
@@ -291,9 +388,22 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
             {demagMode === "manual" && (
               <div className="space-y-1 pl-2 border-l-2 border-indigo-800/60">
                 <RangeInput label="正側" min={String(s.demagPosMin ?? 0.5)} max={String(s.demagPosMax ?? 2.0)}
-                  onMinChange={(v) => onCalcChange({ demagPosMin: parseFloat(v) || 0.5 })}
-                  onMaxChange={(v) => onCalcChange({ demagPosMax: parseFloat(v) || 2.0 })}
+                  onMinChange={setDemagPosMin}
+                  onMaxChange={setDemagPosMax}
                 />
+                {/* 連動トグル */}
+                <button
+                  onClick={() => onCalcChange({ demagLinkRanges: !demagLink })}
+                  className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                    demagLink
+                      ? "text-indigo-400 bg-indigo-900/40 hover:bg-indigo-900/60"
+                      : "text-zinc-500 bg-zinc-700/40 hover:bg-zinc-700/70"
+                  }`}
+                  title="正側の範囲を変えると負側を自動ミラー反転"
+                >
+                  <span>{demagLink ? "🔗" : "🔓"}</span>
+                  <span>{demagLink ? "負側を連動" : "独立設定"}</span>
+                </button>
                 <RangeInput label="負側" min={String(s.demagNegMin ?? -2.0)} max={String(s.demagNegMax ?? -0.5)}
                   onMinChange={(v) => onCalcChange({ demagNegMin: parseFloat(v) || -2.0 })}
                   onMaxChange={(v) => onCalcChange({ demagNegMax: parseFloat(v) || -0.5 })}
@@ -346,27 +456,27 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
 // ── 解析タブ ──────────────────────────
 function AnalysisTab({ entries, params, unitMode, onLoadFiles, onAddFiles, onClearAll,
   onParamsChange, onUnitModeChange, onEntryDisplayChange, onEntryCalcChange, onEntryRemove, onEntryMove,
-  onApplyFirstToAll,
-  newRef, addRef, pickFiles }: {
+  onApplyFirstToAll }: {
   entries: FileEntry[]; params: AnalysisParams; unitMode: UnitMode;
-  onLoadFiles: (f: File[]) => void; onAddFiles: (f: File[]) => void; onClearAll: () => void;
+  onLoadFiles: (f: FileWithPath[]) => void; onAddFiles: (f: FileWithPath[]) => void; onClearAll: () => void;
   onParamsChange: (n: Partial<AnalysisParams>) => void; onUnitModeChange: (m: UnitMode) => void;
   onEntryDisplayChange: (i: number, p: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => void;
   onEntryCalcChange: (i: number, p: Partial<FileCalcSettings>) => void;
   onEntryRemove: (i: number) => void;
   onEntryMove: (from: number, to: number) => void;
   onApplyFirstToAll: () => void;
-  newRef: React.RefObject<HTMLInputElement | null>; addRef: React.RefObject<HTMLInputElement | null>;
-  pickFiles: (ref: React.RefObject<HTMLInputElement | null>, handler: (f: File[]) => void) => void;
 }) {
+  const pickLoad = async () => { const f = await openVSMFiles(true); if (f.length) onLoadFiles(f); };
+  const pickAdd  = async () => { const f = await openVSMFiles(true); if (f.length) onAddFiles(f); };
+
   return (
     <div className="flex-1 overflow-y-auto">
       <Section title="ファイル">
-        <button onClick={() => pickFiles(newRef, onLoadFiles)}
+        <button onClick={pickLoad}
           className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 px-3 rounded mb-2 transition-colors">
           ファイルを選択 (新規)
         </button>
-        <button onClick={() => pickFiles(addRef, onAddFiles)}
+        <button onClick={pickAdd}
           className="w-full bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-sm py-2 px-3 rounded mb-2 transition-colors">
           ファイルを追加...
         </button>
@@ -671,11 +781,10 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
 
 // ── 保存タブ ──────────────────────────
 function SaveTab({ onSave, onLoad, hasEntries, onSaveGraph, onCopyGraph }: {
-  onSave: () => Promise<boolean>; onLoad: (f: File) => void; hasEntries: boolean;
+  onSave: () => Promise<boolean>; onLoad: () => void; hasEntries: boolean;
   onSaveGraph: (opts: ExportOptions) => Promise<boolean>;
   onCopyGraph: (scale: number) => Promise<void>;
 }) {
-  const sessionRef = useRef<HTMLInputElement>(null);
 
   const [format,        setFormat]        = useState<ExportOptions["format"]>("png");
   const [scale,         setScale]         = useState(2);
@@ -720,9 +829,6 @@ function SaveTab({ onSave, onLoad, hasEntries, onSaveGraph, onCopyGraph }: {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <input ref={sessionRef} type="file" accept=".vsm_session" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) { onLoad(f); e.target.value = ""; } }}
-      />
 
       {/* ── グラフ画像 ── */}
       <Section title="グラフ画像出力">
@@ -818,7 +924,7 @@ function SaveTab({ onSave, onLoad, hasEntries, onSaveGraph, onCopyGraph }: {
           className="w-full bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-zinc-100 text-sm py-2 px-3 rounded mb-2 transition-colors">
           セッションを保存...
         </button>
-        <button onClick={() => sessionRef.current?.click()}
+        <button onClick={onLoad}
           className="w-full bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-sm py-2 px-3 rounded transition-colors">
           セッションを読み込み...
         </button>
@@ -895,19 +1001,6 @@ export default function Sidebar({
   onApplyFirstToAll, onSaveSession, onLoadSession, onSaveGraph, onCopyGraph,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("analysis");
-  const newRef = useRef<HTMLInputElement>(null);
-  const addRef = useRef<HTMLInputElement>(null);
-
-  const pickFiles = (ref: React.RefObject<HTMLInputElement | null>, handler: (f: File[]) => void) => {
-    ref.current?.click();
-    const onChange = () => {
-      const files = Array.from(ref.current?.files ?? []);
-      if (files.length) handler(files);
-      ref.current!.value = "";
-      ref.current!.removeEventListener("change", onChange);
-    };
-    ref.current?.addEventListener("change", onChange);
-  };
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "analysis", label: "解析" },
@@ -918,8 +1011,6 @@ export default function Sidebar({
 
   return (
     <aside className="shrink-0 bg-zinc-900 flex flex-col overflow-hidden" style={style}>
-      <input ref={newRef} type="file" accept=".VSM,.vsm,.dat" multiple className="hidden" />
-      <input ref={addRef} type="file" accept=".VSM,.vsm,.dat" multiple className="hidden" />
 
       <div className="flex border-b border-zinc-800 shrink-0">
         {TABS.map((tab) => (
@@ -944,7 +1035,6 @@ export default function Sidebar({
           onEntryRemove={onEntryRemove}
           onEntryMove={onEntryMove}
           onApplyFirstToAll={onApplyFirstToAll}
-          newRef={newRef} addRef={addRef} pickFiles={pickFiles}
         />
       )}
       {activeTab === "graph" && (

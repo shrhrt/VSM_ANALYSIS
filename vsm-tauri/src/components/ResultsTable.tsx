@@ -89,6 +89,30 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit }: Props
     navigator.clipboard.writeText([head, sep, ...body].join("\n"));
   };
 
+  const copyHTML = async () => {
+    const hdrs = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, "Mr/Ms"];
+    const rows = sortedEntries.map((e) => [
+      e.legendName || e.file.name,
+      fmt(e.result?.Ms,  1),
+      fmt(e.result?.Mr,  1),
+      fmt(e.result?.Hc_Oe, 2, scale),
+      fmt(e.result?.Hs_Oe, 2, scale),
+      fmt(e.result?.squareness, 3),
+    ]);
+    const thBase = "border:1px solid #bbb;padding:6px 12px;background:#f0f0f0;font-weight:600;white-space:nowrap;";
+    const tdBase = "border:1px solid #bbb;padding:4px 12px;white-space:nowrap;";
+    const thead = `<tr>${hdrs.map((h, i) => `<th style="${thBase}text-align:${i === 0 ? "left" : "right"};">${h}</th>`).join("")}</tr>`;
+    const tbody = rows.map((r, ri) =>
+      `<tr style="background:${ri % 2 === 1 ? "#f9f9f9" : "#fff"};">${r.map((c, ci) => `<td style="${tdBase}text-align:${ci === 0 ? "left" : "right"};">${c}</td>`).join("")}</tr>`
+    ).join("");
+    const html = `<table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }) })]);
+    } catch {
+      navigator.clipboard.writeText(html);
+    }
+  };
+
   return (
     <div className="bg-zinc-900 border-t border-zinc-800 flex flex-col shrink-0"
       style={collapsed ? {} : { maxHeight: 140 }}>
@@ -106,12 +130,19 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit }: Props
         {!collapsed && (
           <div className="ml-auto flex gap-1">
             <button onClick={copyText}
-              className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded transition-colors">
+              className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded transition-colors"
+              title="タブ区切りテキストでコピー（Excel貼り付け用）">
               テキスト
             </button>
             <button onClick={copyTable}
-              className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded transition-colors">
-              表
+              className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded transition-colors"
+              title="Markdownテーブル形式でコピー">
+              Markdown
+            </button>
+            <button onClick={copyHTML}
+              className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded transition-colors"
+              title="HTMLテーブルでコピー（Word/PowerPoint貼り付け用）">
+              HTML
             </button>
             <button onClick={onToggleUnit}
               className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded transition-colors font-mono">

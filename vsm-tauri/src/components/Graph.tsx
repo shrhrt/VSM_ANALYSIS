@@ -1,5 +1,6 @@
 import Plot from "react-plotly.js";
 import type { FileEntry, UnitMode, GraphSettings, PaperColorScheme } from "../App";
+import { texToDisplay } from "../utils/texToDisplay";
 
 interface Props {
   entries:       FileEntry[];
@@ -118,7 +119,7 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
           x: H, y: M,
           type: "scatter" as const,
           mode: plotMode as "lines" | "lines+markers",
-          name: e.legendName || e.file.name.replace(/\.[^.]+$/, ""),
+          name: texToDisplay(e.legendName || e.file.name.replace(/\.[^.]+$/, "")),
           line:   { color, width: lineWidth },
           marker: { color, size: markerSize, symbol: e.markerSymbol ?? markerSymbol },
         }];
