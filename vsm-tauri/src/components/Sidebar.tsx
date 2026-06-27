@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import type { FileEntry, UnitMode, GraphSettings } from "../App";
-import { FILE_COLORS } from "../App";
-import type { AnalysisParams } from "../api/client";
+import type { FileEntry, UnitMode, GraphSettings, PaperColorScheme } from "../App";
+import type { AnalysisParams, FileCalcSettings } from "../api/client";
+import type { ExportOptions } from "../utils/graphExport";
 
+// ── Props ──────────────────────────
 interface Props {
+  style?:                React.CSSProperties;
   entries:               FileEntry[];
   params:                AnalysisParams;
   unitMode:              UnitMode;
@@ -14,9 +16,15 @@ interface Props {
   onParamsChange:        (next: Partial<AnalysisParams>) => void;
   onUnitModeChange:      (mode: UnitMode) => void;
   onGraphSettingsChange: (next: Partial<GraphSettings>) => void;
-  onEntryColorChange:    (index: number, color: string) => void;
+  onEntryDisplayChange:  (index: number, patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => void;
+  onEntryCalcChange:     (index: number, patch: Partial<FileCalcSettings>) => void;
   onEntryRemove:         (index: number) => void;
-  onEntrySettingsChange: (index: number, patch: { thickness?: number; area?: number }) => void;
+  onEntryMove:           (from: number, to: number) => void;
+  onApplyFirstToAll:     () => void;
+  onSaveSession:         () => Promise<boolean>;
+  onLoadSession:         (file: File) => void;
+  onSaveGraph:           (opts: ExportOptions) => Promise<boolean>;
+  onCopyGraph:           (scale: number) => Promise<void>;
 }
 
 type Tab = "analysis" | "graph" | "save" | "log";
@@ -72,20 +80,285 @@ function Select({ label, value, options, onChange }: {
   );
 }
 
+// 3択ボタングループ
+function SegmentedControl({ value, options, onChange }: {
+  value: string; options: { value: string; label: string }[]; onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex rounded-md overflow-hidden border border-zinc-700 mb-3">
+      {options.map((o, i) => (
+        <button key={o.value} onClick={() => onChange(o.value)}
+          className={`flex-1 text-xs py-1 transition-colors ${
+            value === o.value ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+          } ${i > 0 ? "border-l border-zinc-700" : ""}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// 範囲入力 (min ～ max)
+function RangeInput({ label, min, max, onMinChange, onMaxChange, unit = "T" }: {
+  label: string; min: string; max: string; unit?: string;
+  onMinChange: (v: string) => void; onMaxChange: (v: string) => void;
+}) {
+  return (
+    <div className="mb-2">
+      <label className="text-xs text-zinc-500 block mb-1">{label} ({unit})</label>
+      <div className="flex items-center gap-1">
+        <input type="number" value={min} step={0.1}
+          onChange={(e) => onMinChange(e.target.value)}
+          className="w-full bg-zinc-700/50 border border-zinc-600 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+          placeholder="下限"
+        />
+        <span className="text-zinc-600 text-xs shrink-0">～</span>
+        <input type="number" value={max} step={0.1}
+          onChange={(e) => onMaxChange(e.target.value)}
+          className="w-full bg-zinc-700/50 border border-zinc-600 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+          placeholder="上限"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── ファイルエントリ1件 ──────────────────────────
+const MARKER_OPTIONS = [
+  { value: "",           label: "グローバル設定" },
+  { value: "circle",     label: "○ 丸" },
+  { value: "square",     label: "□ 四角" },
+  { value: "diamond",    label: "◇ ひし形" },
+  { value: "triangle-up", label: "△ 三角" },
+  { value: "cross",      label: "+ クロス" },
+  { value: "x",          label: "× バツ" },
+];
+
+function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcChange, onRemove, onMove }: {
+  entry:          FileEntry;
+  index:          number;
+  total:          number;
+  params:         AnalysisParams;
+  onDisplayChange: (patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => void;
+  onCalcChange:   (patch: Partial<FileCalcSettings>) => void;
+  onRemove:       () => void;
+  onMove:         (dir: -1 | 1) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const s = entry.calcSettings ?? {};
+
+  const demagMode = s.perDemagMode ?? "";   // "" = グローバル設定
+  const msManual  = s.msManual ?? false;
+  const msLink    = s.msLinkRanges ?? true;
+
+  const stemName = entry.file.name.replace(/\.[^.]+$/, "");
+  const displayName = entry.legendName ?? "";
+
+  // Ms範囲連動: 正側が変わったら負側も反転して更新
+  const setMsPosMin = (v: string) => {
+    onCalcChange({ msPosMin: parseFloat(v) || 0 });
+    if (msLink) onCalcChange({ msNegMin: -(parseFloat(v) || 0) });
+  };
+  const setMsPosMax = (v: string) => {
+    const n = parseFloat(v) || 0;
+    onCalcChange({ msPosMax: n });
+    if (msLink) onCalcChange({ msNegMax: -Math.abs(s.msPosMin ?? 0.5), msNegMin: -n });
+  };
+
+  return (
+    <li className="rounded-lg bg-zinc-800/40 border border-zinc-700/50 overflow-hidden">
+      {/* ── メイン行 ── */}
+      <div className="flex items-center gap-1.5 px-2 py-2">
+        {/* カラーピッカー */}
+        <input type="color" value={entry.color}
+          onChange={(e) => onDisplayChange({ color: e.target.value })}
+          className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent shrink-0"
+          title="色を変更"
+        />
+
+        {/* 並び替えボタン */}
+        <div className="flex flex-col gap-0.5 shrink-0">
+          <button onClick={() => onMove(-1)} disabled={index === 0}
+            className="w-4 h-3 flex items-center justify-center text-zinc-600 hover:text-zinc-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            title="上へ">
+            <svg viewBox="0 0 8 5" className="w-3 h-2 fill-current"><path d="M4 0L8 5H0z"/></svg>
+          </button>
+          <button onClick={() => onMove(1)} disabled={index === total - 1}
+            className="w-4 h-3 flex items-center justify-center text-zinc-600 hover:text-zinc-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            title="下へ">
+            <svg viewBox="0 0 8 5" className="w-3 h-2 fill-current"><path d="M4 5L0 0H8z"/></svg>
+          </button>
+        </div>
+
+        {/* 凡例名入力 */}
+        <input
+          type="text"
+          value={displayName}
+          placeholder={stemName}
+          onChange={(e) => onDisplayChange({ legendName: e.target.value })}
+          className="flex-1 min-w-0 bg-zinc-700/50 border border-zinc-600/50 text-zinc-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
+          title="凡例に表示する名前（空欄=ファイル名）"
+        />
+
+        {/* ステータスドット */}
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+          entry.loading ? "bg-yellow-500 animate-pulse" :
+          entry.error   ? "bg-red-500" : "bg-emerald-500"
+        }`} title={entry.error ?? (entry.loading ? "解析中" : "完了")} />
+
+        {/* 設定展開ボタン */}
+        <button onClick={() => setExpanded((v) => !v)}
+          className={`text-xs shrink-0 w-6 h-6 flex items-center justify-center rounded transition-colors ${
+            expanded ? "text-indigo-400 bg-indigo-900/40" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700"
+          }`} title="ファイル別設定">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current">
+            <path d="M8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm5.72-1.45a5.5 5.5 0 0 0 .05-.55 5.5 5.5 0 0 0-.05-.55l1.19-.93a.3.3 0 0 0 .07-.38l-1.13-1.96a.3.3 0 0 0-.36-.13l-1.4.56a5.37 5.37 0 0 0-.95-.55l-.21-1.49A.3.3 0 0 0 10.5 3h-2.25a.3.3 0 0 0-.3.25l-.21 1.5a5.37 5.37 0 0 0-.95.55l-1.4-.57a.3.3 0 0 0-.36.13L3.9 6.82a.29.29 0 0 0 .07.38l1.19.93a5.56 5.56 0 0 0-.05.55 5.56 5.56 0 0 0 .05.55L3.97 10.16a.29.29 0 0 0-.07.38l1.13 1.96c.07.13.23.18.36.13l1.4-.56c.3.2.62.38.95.55l.21 1.49a.3.3 0 0 0 .3.25h2.25a.3.3 0 0 0 .3-.25l.21-1.5c.33-.17.65-.34.95-.55l1.4.57c.13.05.29 0 .36-.13l1.13-1.96a.29.29 0 0 0-.07-.38l-1.19-.93z"/>
+          </svg>
+        </button>
+
+        {/* 削除ボタン */}
+        <button onClick={onRemove}
+          className="text-zinc-600 hover:text-red-400 text-xs shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-red-900/20 transition-colors"
+          title="削除">✕
+        </button>
+      </div>
+
+      {/* ── 展開パネル ── */}
+      {expanded && (
+        <div className="border-t border-zinc-700/50 px-3 pt-3 pb-3 space-y-4 bg-zinc-900/50">
+
+          {/* スタイル */}
+          <div>
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">スタイル</p>
+            <label className="text-xs text-zinc-500 block mb-1">マーカー形状</label>
+            <select value={entry.markerSymbol ?? ""}
+              onChange={(e) => onDisplayChange({ markerSymbol: e.target.value || undefined })}
+              className="w-full bg-zinc-700/50 border border-zinc-600 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500">
+              {MARKER_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* サンプル設定 */}
+          <div>
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">サンプル</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-zinc-500 block mb-1">膜厚 (nm)</label>
+                <input type="number" min={0.1} step={1}
+                  placeholder={String(params.thickness)}
+                  value={s.thickness ?? ""}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    onCalcChange({ thickness: isNaN(v) ? undefined : v });
+                  }}
+                  className="w-full bg-zinc-700/50 border border-zinc-600 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 block mb-1">面積 (mm²)</label>
+                <input type="number" min={0.1} step={1}
+                  placeholder={String(params.area)}
+                  value={s.area ?? ""}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    onCalcChange({ area: isNaN(v) ? undefined : v });
+                  }}
+                  className="w-full bg-zinc-700/50 border border-zinc-600 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 反磁性補正 */}
+          <div>
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">反磁性補正</p>
+            <SegmentedControl value={demagMode}
+              options={[
+                { value: "",       label: `GBL` },
+                { value: "auto",   label: "自動" },
+                { value: "manual", label: "手動" },
+                { value: "none",   label: "なし" },
+              ]}
+              onChange={(v) => onCalcChange({ perDemagMode: v as FileCalcSettings["perDemagMode"] })}
+            />
+            <p className="text-xs text-zinc-600 mb-2">
+              {demagMode === "" ? `GBL = グローバル設定 (${params.demagMode === "auto" ? "自動" : "なし"}) を使用` :
+               demagMode === "auto" ? "高磁場領域の傾きを自動検出" :
+               demagMode === "manual" ? "磁場範囲を手動で指定" : "補正を行わない"}
+            </p>
+            {demagMode === "manual" && (
+              <div className="space-y-1 pl-2 border-l-2 border-indigo-800/60">
+                <RangeInput label="正側" min={String(s.demagPosMin ?? 0.5)} max={String(s.demagPosMax ?? 2.0)}
+                  onMinChange={(v) => onCalcChange({ demagPosMin: parseFloat(v) || 0.5 })}
+                  onMaxChange={(v) => onCalcChange({ demagPosMax: parseFloat(v) || 2.0 })}
+                />
+                <RangeInput label="負側" min={String(s.demagNegMin ?? -2.0)} max={String(s.demagNegMax ?? -0.5)}
+                  onMinChange={(v) => onCalcChange({ demagNegMin: parseFloat(v) || -2.0 })}
+                  onMaxChange={(v) => onCalcChange({ demagNegMax: parseFloat(v) || -0.5 })}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Ms計算範囲 */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Ms 計算範囲</p>
+              <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer">
+                <div onClick={() => onCalcChange({ msManual: !msManual })}
+                  className={`w-7 h-3.5 rounded-full relative transition-colors cursor-pointer ${msManual ? "bg-indigo-500" : "bg-zinc-600"}`}>
+                  <div className={`absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full shadow transition-transform ${msManual ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                </div>
+                手動
+              </label>
+            </div>
+            {msManual ? (
+              <div className="space-y-1 pl-2 border-l-2 border-emerald-800/60">
+                <RangeInput label="正側" min={String(s.msPosMin ?? 0.5)} max={String(s.msPosMax ?? 2.0)}
+                  onMinChange={setMsPosMin}
+                  onMaxChange={setMsPosMax}
+                />
+                <RangeInput label="負側" min={String(s.msNegMin ?? -2.0)} max={String(s.msNegMax ?? -0.5)}
+                  onMinChange={(v) => onCalcChange({ msNegMin: parseFloat(v) || -2.0 })}
+                  onMaxChange={(v) => onCalcChange({ msNegMax: parseFloat(v) || -0.5 })}
+                />
+                <label className="flex items-center gap-1.5 text-xs text-zinc-500 cursor-pointer mt-1">
+                  <input type="checkbox" checked={msLink}
+                    onChange={(e) => onCalcChange({ msLinkRanges: e.target.checked })}
+                    className="accent-indigo-500"
+                  />
+                  正負連動
+                </label>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-600">全磁場域の飽和値から自動計算</p>
+            )}
+          </div>
+
+        </div>
+      )}
+    </li>
+  );
+}
+
 // ── 解析タブ ──────────────────────────
 function AnalysisTab({ entries, params, unitMode, onLoadFiles, onAddFiles, onClearAll,
-  onParamsChange, onUnitModeChange, onEntryColorChange, onEntryRemove, onEntrySettingsChange,
+  onParamsChange, onUnitModeChange, onEntryDisplayChange, onEntryCalcChange, onEntryRemove, onEntryMove,
+  onApplyFirstToAll,
   newRef, addRef, pickFiles }: {
   entries: FileEntry[]; params: AnalysisParams; unitMode: UnitMode;
   onLoadFiles: (f: File[]) => void; onAddFiles: (f: File[]) => void; onClearAll: () => void;
   onParamsChange: (n: Partial<AnalysisParams>) => void; onUnitModeChange: (m: UnitMode) => void;
-  onEntryColorChange: (i: number, c: string) => void; onEntryRemove: (i: number) => void;
-  onEntrySettingsChange: (i: number, p: { thickness?: number; area?: number }) => void;
+  onEntryDisplayChange: (i: number, p: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => void;
+  onEntryCalcChange: (i: number, p: Partial<FileCalcSettings>) => void;
+  onEntryRemove: (i: number) => void;
+  onEntryMove: (from: number, to: number) => void;
+  onApplyFirstToAll: () => void;
   newRef: React.RefObject<HTMLInputElement | null>; addRef: React.RefObject<HTMLInputElement | null>;
   pickFiles: (ref: React.RefObject<HTMLInputElement | null>, handler: (f: File[]) => void) => void;
 }) {
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-
   return (
     <div className="flex-1 overflow-y-auto">
       <Section title="ファイル">
@@ -103,75 +376,32 @@ function AnalysisTab({ entries, params, unitMode, onLoadFiles, onAddFiles, onCle
         </button>
       </Section>
 
-      {/* ファイルリスト（色・個別設定） */}
       {entries.length > 0 && (
-        <Section title="読み込み済み">
-          <ul className="space-y-1">
+        <Section title={`読み込み済み (${entries.length} ファイル)`}>
+          <ul className="space-y-2">
             {entries.map((e, i) => (
-              <li key={i} className="rounded bg-zinc-800/50">
-                {/* メイン行 */}
-                <div className="flex items-center gap-2 px-2 py-1.5">
-                  <input type="color" value={e.color}
-                    onChange={(ev) => onEntryColorChange(i, ev.target.value)}
-                    className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent shrink-0"
-                    title="色を変更"
-                  />
-                  <span className={`text-xs truncate flex-1 ${e.error ? "text-red-400" : e.loading ? "text-zinc-500" : "text-zinc-300"}`}
-                    title={e.file.name}>
-                    {e.loading ? "⏳" : e.error ? "✗" : "✓"} {e.file.name}
-                  </span>
-                  {/* 個別設定展開ボタン */}
-                  <button
-                    onClick={() => setExpandedIndex(expandedIndex === i ? null : i)}
-                    className={`text-xs px-1 shrink-0 transition-colors ${expandedIndex === i ? "text-indigo-400" : "text-zinc-600 hover:text-zinc-300"}`}
-                    title="ファイル別設定">⚙
-                  </button>
-                  <button onClick={() => onEntryRemove(i)}
-                    className="text-zinc-600 hover:text-red-400 text-xs shrink-0 transition-colors"
-                    title="削除">✕
-                  </button>
-                </div>
-
-                {/* 個別設定パネル */}
-                {expandedIndex === i && (
-                  <div className="px-3 pb-3 border-t border-zinc-700 mt-1 pt-2 space-y-2">
-                    <p className="text-xs text-zinc-500 mb-2">
-                      空欄 = グローバル値 ({params.thickness} nm / {params.area} mm²) を使用
-                    </p>
-                    <div>
-                      <label className="text-xs text-zinc-400 block mb-1">膜厚 (nm)</label>
-                      <input type="number" min={0.1} step={1}
-                        placeholder={String(params.thickness)}
-                        value={e.thickness ?? ""}
-                        onChange={(ev) => {
-                          const v = parseFloat(ev.target.value);
-                          onEntrySettingsChange(i, { thickness: isNaN(v) ? undefined : v });
-                        }}
-                        className="w-full bg-zinc-700 border border-zinc-600 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-zinc-400 block mb-1">面積 (mm²)</label>
-                      <input type="number" min={0.1} step={1}
-                        placeholder={String(params.area)}
-                        value={e.area ?? ""}
-                        onChange={(ev) => {
-                          const v = parseFloat(ev.target.value);
-                          onEntrySettingsChange(i, { area: isNaN(v) ? undefined : v });
-                        }}
-                        className="w-full bg-zinc-700 border border-zinc-600 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-                )}
-              </li>
+              <FileEntryItem key={i} entry={e} index={i} total={entries.length} params={params}
+                onDisplayChange={(p) => onEntryDisplayChange(i, p)}
+                onCalcChange={(p) => onEntryCalcChange(i, p)}
+                onRemove={() => onEntryRemove(i)}
+                onMove={(dir) => onEntryMove(i, i + dir)}
+              />
             ))}
           </ul>
+          {entries.length >= 2 && (
+            <button onClick={onApplyFirstToAll}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-amber-900/40 text-zinc-400 hover:text-amber-300 border border-zinc-700 hover:border-amber-700/50 text-xs py-2 px-3 rounded transition-colors">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current">
+                <path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zm0 1.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM7.25 5v3.25H4.5v1.5h2.75V13h1.5V9.75H11.5v-1.5H8.75V5h-1.5z"/>
+              </svg>
+              1番目の設定を全ファイルに適用
+            </button>
+          )}
         </Section>
       )}
 
-      {/* グローバル設定 */}
       <Section title="サンプル情報（デフォルト）">
+        <p className="text-xs text-zinc-600 mb-3">各ファイルの ⚙ で個別上書き可能</p>
         <NumberInput label="膜厚 (nm)" value={params.thickness} step={1} min={0.1}
           onChange={(v) => onParamsChange({ thickness: v })} />
         <NumberInput label="面積 (mm²)" value={params.area} step={1} min={0.1}
@@ -187,7 +417,7 @@ function AnalysisTab({ entries, params, unitMode, onLoadFiles, onAddFiles, onCle
           ]}
           onChange={(v) => onUnitModeChange(v as UnitMode)}
         />
-        <Select label="反磁性補正" value={params.demagMode}
+        <Select label="反磁性補正（デフォルト）" value={params.demagMode}
           options={[
             { value: "auto", label: "自動検出" },
             { value: "none", label: "なし" },
@@ -213,14 +443,47 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
   return (
     <div className="flex-1 overflow-y-auto">
 
-      {/* 表示ON/OFF */}
+      {/* ── 論文モード ── */}
+      <Section title="論文モード">
+        <Toggle
+          label="論文モード（白背景・黒軸・四辺枠）"
+          checked={graphSettings.paperMode}
+          onChange={(v) => onChange({ paperMode: v })}
+        />
+        {graphSettings.paperMode && (
+          <div className="mt-3 space-y-2">
+            <label className="text-xs text-zinc-400 block mb-1.5">配色スキーム</label>
+            {(
+              [
+                { value: "current",  label: "現在の色そのまま" },
+                { value: "journal",  label: "ジャーナル標準色" },
+                { value: "grayscale", label: "グレースケール（モノクロ印刷対応）" },
+              ] as { value: PaperColorScheme; label: string }[]
+            ).map((opt) => (
+              <label key={opt.value} className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="radio"
+                  name="paperColorScheme"
+                  value={opt.value}
+                  checked={graphSettings.paperColorScheme === opt.value}
+                  onChange={() => onChange({ paperColorScheme: opt.value })}
+                  className="accent-indigo-500"
+                />
+                <span className="text-xs text-zinc-300 group-hover:text-zinc-100 transition-colors">
+                  {opt.label}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      </Section>
+
       <Section title="表示">
         <Toggle label="凡例を表示"      checked={graphSettings.showLegend}    onChange={(v) => onChange({ showLegend: v })} />
         <Toggle label="グリッド線を表示" checked={graphSettings.showGrid}      onChange={(v) => onChange({ showGrid: v })} />
         <Toggle label="原点線を表示"    checked={graphSettings.showZeroLines} onChange={(v) => onChange({ showZeroLines: v })} />
       </Section>
 
-      {/* 凡例 */}
       <Section title="凡例">
         <Select label="位置" value={graphSettings.legendPosition}
           options={[
@@ -235,7 +498,6 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
           onChange={(v) => onChange({ legendFontSize: v })} />
       </Section>
 
-      {/* 軸ラベル */}
       <Section title="軸ラベル">
         <div className="mb-3">
           <label className="text-xs text-zinc-400 block mb-1">X 軸ラベル（空欄 = 自動）</label>
@@ -259,7 +521,6 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
           onChange={(v) => onChange({ tickLabelSize: v })} />
       </Section>
 
-      {/* 描画範囲 */}
       <Section title="描画範囲（空欄 = 自動）">
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
@@ -297,7 +558,6 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
         </button>
       </Section>
 
-      {/* プロット */}
       <Section title="プロット">
         <NumberInput label="線幅" value={graphSettings.lineWidth} step={0.5} min={0.5}
           onChange={(v) => onChange({ lineWidth: v })} />
@@ -316,9 +576,31 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
         />
       </Section>
 
-      {/* 目盛り書式 */}
-      <Section title="目盛り書式（有効数字）">
-        <Select label="X 軸" value={graphSettings.xTickFormat}
+      <Section title="目盛り書式">
+        {/* 目盛り間隔 */}
+        <div className="mb-3">
+          <p className="text-xs text-zinc-500 mb-2">目盛り間隔（空欄 = 自動）</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">X 間隔</label>
+              <input type="number" value={graphSettings.xDtick ?? ""} step="any" min={0}
+                placeholder="auto"
+                onChange={(e) => onChange({ xDtick: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Y 間隔</label>
+              <input type="number" value={graphSettings.yDtick ?? ""} step="any" min={0}
+                placeholder="auto"
+                onChange={(e) => onChange({ yDtick: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
+              />
+            </div>
+          </div>
+        </div>
+        {/* 目盛りラベル書式 */}
+        <Select label="X ラベル書式" value={graphSettings.xTickFormat}
           options={[
             { value: "",     label: "自動" },
             { value: ".0f",  label: "整数 (例: 1)" },
@@ -331,7 +613,7 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
           ]}
           onChange={(v) => onChange({ xTickFormat: v })}
         />
-        <Select label="Y 軸" value={graphSettings.yTickFormat}
+        <Select label="Y ラベル書式" value={graphSettings.yTickFormat}
           options={[
             { value: "",     label: "自動" },
             { value: ".0f",  label: "整数 (例: 100)" },
@@ -345,7 +627,6 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
         />
       </Section>
 
-      {/* 原点線・グリッドスタイル */}
       <Section title="線スタイル">
         <Select label="原点線のスタイル" value={graphSettings.zeroLineStyle}
           options={[
@@ -384,24 +665,162 @@ function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; o
           </div>
         </div>
       </Section>
-
     </div>
   );
 }
 
 // ── 保存タブ ──────────────────────────
-function SaveTab() {
+function SaveTab({ onSave, onLoad, hasEntries, onSaveGraph, onCopyGraph }: {
+  onSave: () => Promise<boolean>; onLoad: (f: File) => void; hasEntries: boolean;
+  onSaveGraph: (opts: ExportOptions) => Promise<boolean>;
+  onCopyGraph: (scale: number) => Promise<void>;
+}) {
+  const sessionRef = useRef<HTMLInputElement>(null);
+
+  const [format,        setFormat]        = useState<ExportOptions["format"]>("png");
+  const [scale,         setScale]         = useState(2);
+  const [useCustomSize, setUseCustomSize] = useState(false);
+  const [width,         setWidth]         = useState(1200);
+  const [height,        setHeight]        = useState(900);
+  const [saving,        setSaving]        = useState(false);
+  const [copying,       setCopying]       = useState(false);
+  const [msg,           setMsg]           = useState<{ text: string; ok: boolean } | null>(null);
+
+  const flash = (text: string, ok: boolean) => {
+    setMsg({ text, ok });
+    setTimeout(() => setMsg(null), 2500);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const saved = await onSaveGraph({ format, scale, useCustomSize, width, height });
+      if (saved) flash("保存しました", true);
+    } catch (e: unknown) {
+      flash((e as Error).message ?? "保存に失敗しました", false);
+    } finally { setSaving(false); }
+  };
+
+  const handleCopy = async () => {
+    setCopying(true);
+    try {
+      await onCopyGraph(scale);
+      flash("クリップボードにコピーしました", true);
+    } catch (e: unknown) {
+      flash((e as Error).message ?? "コピーに失敗しました", false);
+    } finally { setCopying(false); }
+  };
+
+  const SCALES = [1, 2, 3, 4];
+  const FORMATS: { value: ExportOptions["format"]; label: string }[] = [
+    { value: "png",  label: "PNG" },
+    { value: "svg",  label: "SVG" },
+    { value: "jpeg", label: "JPEG" },
+  ];
+
   return (
     <div className="flex-1 overflow-y-auto">
-      <Section title="グラフ保存">
-        <p className="text-xs text-zinc-500 mb-3">グラフ右上の 📷 アイコンから PNG / SVG で保存できます</p>
-      </Section>
-      <Section title="セッション">
-        <button disabled className="w-full bg-zinc-700 text-zinc-500 text-sm py-2 px-3 rounded mb-2 cursor-not-allowed">
-          セッションを保存... (未実装)
+      <input ref={sessionRef} type="file" accept=".vsm_session" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) { onLoad(f); e.target.value = ""; } }}
+      />
+
+      {/* ── グラフ画像 ── */}
+      <Section title="グラフ画像出力">
+
+        {/* 形式 */}
+        <div className="mb-3">
+          <label className="text-xs text-zinc-400 block mb-1.5">ファイル形式</label>
+          <div className="flex rounded-md overflow-hidden border border-zinc-700">
+            {FORMATS.map((f, i) => (
+              <button key={f.value} onClick={() => setFormat(f.value)}
+                className={`flex-1 text-xs py-1.5 font-medium transition-colors ${
+                  format === f.value ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                } ${i > 0 ? "border-l border-zinc-700" : ""}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 解像度倍率 */}
+        <div className="mb-3">
+          <label className="text-xs text-zinc-400 block mb-1.5">解像度倍率</label>
+          <div className="flex rounded-md overflow-hidden border border-zinc-700">
+            {SCALES.map((s, i) => (
+              <button key={s} onClick={() => setScale(s)}
+                className={`flex-1 text-xs py-1.5 font-mono transition-colors ${
+                  scale === s ? "bg-indigo-600 text-white font-bold" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                } ${i > 0 ? "border-l border-zinc-700" : ""}`}>
+                ×{s}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-600 mt-1">×2 = 画面サイズの2倍 (推奨)</p>
+        </div>
+
+        {/* カスタムサイズ */}
+        <div className="mb-4">
+          <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer mb-2">
+            <input type="checkbox" checked={useCustomSize} onChange={(e) => setUseCustomSize(e.target.checked)}
+              className="accent-indigo-500" />
+            カスタムサイズ (px)
+          </label>
+          {useCustomSize && (
+            <div className="grid grid-cols-2 gap-2 pl-4 border-l-2 border-indigo-800/40">
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-1">幅</label>
+                <input type="number" value={width} min={100} step={100}
+                  onChange={(e) => setWidth(Number(e.target.value))}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 block mb-1">高さ</label>
+                <input type="number" value={height} min={100} step={100}
+                  onChange={(e) => setHeight(Number(e.target.value))}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* フィードバックメッセージ */}
+        {msg && (
+          <div className={`text-xs px-3 py-1.5 rounded mb-3 ${
+            msg.ok ? "bg-emerald-900/40 text-emerald-300 border border-emerald-800/50"
+                   : "bg-red-900/40 text-red-300 border border-red-800/50"
+          }`}>
+            {msg.text}
+          </div>
+        )}
+
+        {/* ボタン */}
+        <button onClick={handleSave} disabled={saving}
+          className="w-full flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium py-2 px-3 rounded mb-2 transition-colors">
+          <span>{saving ? "保存中..." : "💾 ダウンロード"}</span>
         </button>
-        <button disabled className="w-full bg-zinc-700 text-zinc-500 text-sm py-2 px-3 rounded cursor-not-allowed">
-          セッションを読み込み... (未実装)
+        {format !== "svg" && (
+          <button onClick={handleCopy} disabled={copying}
+            className="w-full flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-100 text-sm py-2 px-3 rounded transition-colors">
+            <span>{copying ? "コピー中..." : "📋 クリップボードにコピー"}</span>
+          </button>
+        )}
+      </Section>
+
+      {/* ── セッション ── */}
+      <Section title="セッション">
+        <p className="text-xs text-zinc-500 mb-3">
+          ファイルデータと全設定を <code className="text-indigo-400">.vsm_session</code> に保存し次回復元できます
+        </p>
+        <button onClick={async () => { const saved = await onSave(); if (saved) flash("セッションを保存しました", true); }}
+          disabled={!hasEntries}
+          className="w-full bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-zinc-100 text-sm py-2 px-3 rounded mb-2 transition-colors">
+          セッションを保存...
+        </button>
+        <button onClick={() => sessionRef.current?.click()}
+          className="w-full bg-zinc-700 hover:bg-zinc-600 text-zinc-100 text-sm py-2 px-3 rounded transition-colors">
+          セッションを読み込み...
         </button>
       </Section>
     </div>
@@ -421,24 +840,21 @@ function LogTab({ entries }: { entries: FileEntry[] }) {
     );
   }
 
-  const target = entries[selectedIndex] ?? entries[0];
+  const idx    = Math.min(selectedIndex, entries.length - 1);
+  const target = entries[idx] ?? entries[0];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* ファイル選択 */}
       <div className="p-3 border-b border-zinc-800 shrink-0">
-        <select
-          value={selectedIndex}
+        <select value={idx}
           onChange={(e) => setSelectedIndex(Number(e.target.value))}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1.5"
-        >
+          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1.5">
           {entries.map((e, i) => (
-            <option key={i} value={i}>{e.file.name}</option>
+            <option key={i} value={i}>{e.legendName || e.file.name}</option>
           ))}
         </select>
       </div>
 
-      {/* メタデータ */}
       {target.result?.metadata && Object.keys(target.result.metadata).length > 0 && (
         <div className="p-3 border-b border-zinc-800 shrink-0">
           <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">測定情報</p>
@@ -453,7 +869,6 @@ function LogTab({ entries }: { entries: FileEntry[] }) {
         </div>
       )}
 
-      {/* ログ出力 */}
       <div className="flex-1 overflow-y-auto p-3">
         <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">解析ログ</p>
         {target.result?.logs && target.result.logs.length > 0 ? (
@@ -472,10 +887,12 @@ function LogTab({ entries }: { entries: FileEntry[] }) {
 
 // ── メイン Sidebar ──────────────────────────
 export default function Sidebar({
+  style,
   entries, params, unitMode, graphSettings,
   onLoadFiles, onAddFiles, onClearAll,
   onParamsChange, onUnitModeChange, onGraphSettingsChange,
-  onEntryColorChange, onEntryRemove, onEntrySettingsChange,
+  onEntryDisplayChange, onEntryCalcChange, onEntryRemove, onEntryMove,
+  onApplyFirstToAll, onSaveSession, onLoadSession, onSaveGraph, onCopyGraph,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("analysis");
   const newRef = useRef<HTMLInputElement>(null);
@@ -500,11 +917,10 @@ export default function Sidebar({
   ];
 
   return (
-    <aside className="w-72 min-w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col overflow-hidden">
+    <aside className="shrink-0 bg-zinc-900 flex flex-col overflow-hidden" style={style}>
       <input ref={newRef} type="file" accept=".VSM,.vsm,.dat" multiple className="hidden" />
       <input ref={addRef} type="file" accept=".VSM,.vsm,.dat" multiple className="hidden" />
 
-      {/* タブヘッダー */}
       <div className="flex border-b border-zinc-800 shrink-0">
         {TABS.map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -523,15 +939,23 @@ export default function Sidebar({
           entries={entries} params={params} unitMode={unitMode}
           onLoadFiles={onLoadFiles} onAddFiles={onAddFiles} onClearAll={onClearAll}
           onParamsChange={onParamsChange} onUnitModeChange={onUnitModeChange}
-          onEntryColorChange={onEntryColorChange} onEntryRemove={onEntryRemove}
-          onEntrySettingsChange={onEntrySettingsChange}
+          onEntryDisplayChange={onEntryDisplayChange}
+          onEntryCalcChange={onEntryCalcChange}
+          onEntryRemove={onEntryRemove}
+          onEntryMove={onEntryMove}
+          onApplyFirstToAll={onApplyFirstToAll}
           newRef={newRef} addRef={addRef} pickFiles={pickFiles}
         />
       )}
       {activeTab === "graph" && (
         <GraphTab graphSettings={graphSettings} onChange={onGraphSettingsChange} />
       )}
-      {activeTab === "save" && <SaveTab />}
+      {activeTab === "save" && (
+        <SaveTab
+          onSave={onSaveSession} onLoad={onLoadSession} hasEntries={entries.length > 0}
+          onSaveGraph={onSaveGraph} onCopyGraph={onCopyGraph}
+        />
+      )}
       {activeTab === "log"  && <LogTab entries={entries} />}
     </aside>
   );

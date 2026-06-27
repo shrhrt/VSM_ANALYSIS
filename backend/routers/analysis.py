@@ -15,12 +15,26 @@ router = APIRouter(prefix="/api", tags=["analysis"])
 @router.post("/analyze")
 async def analyze_file(
     file: UploadFile = File(...),
+    # グローバル設定
     thickness: float = Form(50.0),
     area: float = Form(100.0),
-    demag_mode: str = Form("auto"),
+    demag_mode: str = Form("auto"),          # "auto" | "none"
     offset_correction: bool = Form(False),
     hs_tolerance: float = Form(2.0),
     hs_min_consecutive: int = Form(3),
+    # ファイル別反磁性補正
+    per_demag_mode: str = Form(""),          # "" = グローバル設定を使用, "auto"|"manual"|"none"
+    demag_pos_min: float = Form(0.5),
+    demag_pos_max: float = Form(2.0),
+    demag_neg_min: float = Form(-2.0),
+    demag_neg_max: float = Form(-0.5),
+    # ファイル別Ms計算範囲
+    ms_manual: bool = Form(False),
+    ms_pos_min: float = Form(0.5),
+    ms_pos_max: float = Form(2.0),
+    ms_neg_min: float = Form(-2.0),
+    ms_neg_max: float = Form(-0.5),
+    ms_link_ranges: bool = Form(True),
 ):
     suffix = Path(file.filename or "data.VSM").suffix
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -32,15 +46,26 @@ async def analyze_file(
         if df is None:
             raise HTTPException(status_code=422, detail=load_error or "読み込み失敗")
 
-        # メタデータ取得
         metadata = file_io.parse_metadata(Path(tmp_path))
 
-        # ログをキャプチャしながら解析実行
+        # ファイル別設定が指定されていればそちらを優先
+        effective_demag_mode = per_demag_mode if per_demag_mode else demag_mode
+
         log_buffer = io.StringIO()
         with contextlib.redirect_stdout(log_buffer):
             result = _run_analysis(
-                df, thickness, area, demag_mode, offset_correction,
-                hs_tolerance, hs_min_consecutive,
+                df=df,
+                thickness=thickness,
+                area=area,
+                demag_mode=effective_demag_mode,
+                demag_pos_range=(demag_pos_min, demag_pos_max),
+                demag_neg_range=(demag_neg_min, demag_neg_max),
+                offset_correction=offset_correction,
+                hs_tolerance=hs_tolerance,
+                hs_min_consecutive=hs_min_consecutive,
+                ms_manual=ms_manual,
+                ms_pos_range=(ms_pos_min, ms_pos_max),
+                ms_neg_range=(ms_neg_min, ms_neg_max),
             )
 
         result["filename"] = file.filename
@@ -52,8 +77,13 @@ async def analyze_file(
         os.unlink(tmp_path)
 
 
-def _run_analysis(df, thickness, area, demag_mode, offset_correction,
-                  hs_tolerance, hs_min_consecutive):
+def _run_analysis(
+    df, thickness, area,
+    demag_mode, demag_pos_range, demag_neg_range,
+    offset_correction,
+    hs_tolerance, hs_min_consecutive,
+    ms_manual, ms_pos_range, ms_neg_range,
+):
     vol_cm3 = area * 1e-2 * thickness * 1e-7
     if vol_cm3 <= 0:
         raise HTTPException(status_code=422, detail="膜厚・面積は正の値を入力してください")
@@ -76,6 +106,13 @@ def _run_analysis(df, thickness, area, demag_mode, offset_correction,
     if demag_mode == "auto":
         slope, r2_pos, r2_neg = vsm_logic.find_demag_slope_auto(H_loop, M_loop)
         print(f"  反磁性補正 (自動): 傾き={slope:.6f}, R²=[正 {r2_pos:.4f}, 負 {r2_neg:.4f}]")
+    elif demag_mode == "manual":
+        slope, r2_pos, r2_neg = vsm_logic.find_demag_slope_manual(
+            H_loop, M_loop, demag_pos_range, demag_neg_range
+        )
+        print(f"  反磁性補正 (手動): 傾き={slope:.6f}, R²=[正 {r2_pos:.4f}, 負 {r2_neg:.4f}]")
+        print(f"    正側範囲: {demag_pos_range[0]}～{demag_pos_range[1]} T")
+        print(f"    負側範囲: {demag_neg_range[0]}～{demag_neg_range[1]} T")
     else:
         print("  反磁性補正: なし")
 
@@ -97,22 +134,27 @@ def _run_analysis(df, thickness, area, demag_mode, offset_correction,
     H_down, M_down = H_loop[: split + 1], M_corrected[: split + 1]
     H_up,   M_up   = H_loop[split:],       M_corrected[split:]
 
-    # 物性値計算
-    Ms_result  = vsm_logic.calculate_saturation_magnetization(H_loop, M_corrected)
-    Ms         = Ms_result.get("avg") if Ms_result else None
+    # Ms計算
+    if ms_manual:
+        print(f"  Ms計算 (手動): 正側 {ms_pos_range}, 負側 {ms_neg_range} T")
+        Ms_result = vsm_logic.calculate_saturation_magnetization(
+            H_loop, M_corrected,
+            pos_range=ms_pos_range,
+            neg_range=ms_neg_range,
+        )
+    else:
+        Ms_result = vsm_logic.calculate_saturation_magnetization(H_loop, M_corrected)
+    Ms = Ms_result.get("avg") if Ms_result else None
 
-    Mr         = vsm_logic.calculate_remanence(H_down, M_down, H_up, M_up)
-
-    Hc_result  = vsm_logic.calculate_coercivity(H_down, M_down, H_up, M_up)
-    Hc_T       = Hc_result.get("T")  if Hc_result else None
-    Hc_Oe      = Hc_result.get("Oe") if Hc_result else None
-
-    Hs_result  = vsm_logic.calculate_saturation_field(
+    Mr        = vsm_logic.calculate_remanence(H_down, M_down, H_up, M_up)
+    Hc_result = vsm_logic.calculate_coercivity(H_down, M_down, H_up, M_up)
+    Hc_T      = Hc_result.get("T")  if Hc_result else None
+    Hc_Oe     = Hc_result.get("Oe") if Hc_result else None
+    Hs_result = vsm_logic.calculate_saturation_field(
         H_down, M_down, H_up, M_up, Ms=Ms or 0,
         tolerance_pct=hs_tolerance, min_consecutive=hs_min_consecutive,
     ) if Ms else None
-    Hs_Oe      = Hs_result.get("Oe") if Hs_result else None
-
+    Hs_Oe     = Hs_result.get("Oe") if Hs_result else None
     squareness = (Mr / Ms) if (Mr is not None and Ms and Ms > 0) else None
 
     print(f"  Ms={Ms:.1f} kA/m" if Ms is not None else "  Ms=N/A")

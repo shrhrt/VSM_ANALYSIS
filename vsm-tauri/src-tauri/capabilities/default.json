@@ -6,6 +6,17 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
-    "opener:default"
+    "opener:default",
+    "dialog:default",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "fs:allow-write",
+    "fs:allow-mkdir",
+    "fs:scope-download-recursive",
+    "fs:scope-document-recursive",
+    "fs:scope-desktop-recursive",
+    "fs:scope-home-recursive"
   ]
 }
