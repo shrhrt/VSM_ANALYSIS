@@ -9,6 +9,8 @@ export interface AnalysisResult {
   Hs_Oe:       number | null;
   squareness:  number | null;
   demag_slope: number;
+  logs:        string[];
+  metadata:    Record<string, string>;
   plot: {
     H_down: number[];
     M_down: number[];
@@ -18,12 +20,12 @@ export interface AnalysisResult {
 }
 
 export interface AnalysisParams {
-  thickness:         number;   // nm
-  area:              number;   // mm²
-  demagMode:        "auto" | "none";
-  offsetCorrection:  boolean;
-  hsTolerance:       number;   // %
-  hsMinConsecutive:  number;
+  thickness:        number;
+  area:             number;
+  demagMode:       "auto" | "none";
+  offsetCorrection: boolean;
+  hsTolerance:      number;
+  hsMinConsecutive: number;
 }
 
 export async function analyzeFile(
@@ -31,13 +33,13 @@ export async function analyzeFile(
   params: AnalysisParams,
 ): Promise<AnalysisResult> {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file",              file);
   form.append("thickness",         String(params.thickness));
   form.append("area",              String(params.area));
-  form.append("demag_mode",          params.demagMode);
-  form.append("offset_correction",   String(params.offsetCorrection));
-  form.append("hs_tolerance",        String(params.hsTolerance));
-  form.append("hs_min_consecutive",  String(params.hsMinConsecutive));
+  form.append("demag_mode",        params.demagMode);
+  form.append("offset_correction", String(params.offsetCorrection));
+  form.append("hs_tolerance",      String(params.hsTolerance));
+  form.append("hs_min_consecutive", String(params.hsMinConsecutive));
 
   const res = await fetch(`${BASE}/api/analyze`, { method: "POST", body: form });
   if (!res.ok) {
