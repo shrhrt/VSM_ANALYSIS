@@ -3,6 +3,7 @@ import type { UnitMode, GraphSettings } from "../App";
 import type { FileWithPath } from "../api/client";
 import { openVSMFiles } from "../api/client";
 import type { ExportOptions } from "../utils/graphExport";
+import HelpDialog from "./HelpDialog";
 
 interface Props {
   hasEntries:      boolean;
@@ -102,6 +103,7 @@ export default function MenuBar({
   onUnitMode, onGraphSettings,
   onSaveGraph, onCopyGraph,
 }: Props) {
+  const [showHelp, setShowHelp] = useState(false);
   const pickOpen = async () => { const f = await openVSMFiles(true); if (f.length) onOpenFiles(f); };
   const pickAdd  = async () => { const f = await openVSMFiles(true); if (f.length) onAddFiles(f); };
 
@@ -136,11 +138,19 @@ export default function MenuBar({
     { kind: "act", label: "クリップボードにコピー（×2）", onClick: () => onCopyGraph(2) },
   ];
 
+  const helpMenu: MenuItem[] = [
+    { kind: "act", label: "計算ロジックの解説", onClick: () => setShowHelp(true) },
+  ];
+
   return (
-    <div className="h-8 shrink-0 bg-zinc-900 border-b border-zinc-800 flex items-center px-2 gap-0.5 select-none">
-      <MenuButton label="ファイル" items={fileMenu} />
-      <MenuButton label="表示"     items={viewMenu} />
-      <MenuButton label="グラフ"   items={graphMenu} />
-    </div>
+    <>
+      {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
+      <div className="h-8 shrink-0 bg-zinc-900 border-b border-zinc-800 flex items-center px-2 gap-0.5 select-none">
+        <MenuButton label="ファイル" items={fileMenu} />
+        <MenuButton label="表示"     items={viewMenu} />
+        <MenuButton label="グラフ"   items={graphMenu} />
+        <MenuButton label="ヘルプ"   items={helpMenu} />
+      </div>
+    </>
   );
 }

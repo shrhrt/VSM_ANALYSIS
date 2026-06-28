@@ -64,8 +64,8 @@ export type GraphSettings = {
 };
 
 export const FILE_COLORS = [
-  "#6366f1", "#f59e0b", "#10b981", "#ef4444",
-  "#8b5cf6", "#06b6d4", "#f97316", "#84cc16",
+  "#1f77b4", "#d62728", "#2ca02c", "#9467bd",
+  "#ff7f0e", "#17becf", "#8c564b", "#e377c2",
 ];
 
 // セッションファイルの内部型 (バージョン問わず共通)
@@ -95,7 +95,7 @@ const DEFAULT_PARAMS: AnalysisParams = {
 
 const DEFAULT_GRAPH: GraphSettings = {
   showLegend: true, showGrid: false, showZeroLines: true,
-  lineWidth: 1.5, markerSize: 0, markerSymbol: "circle",
+  lineWidth: 1.5, markerSize: 5, markerSymbol: "circle",
   legendPosition: "top-left", legendFontSize: 16, legendColumns: 1,
   xLabelOverride: "", yLabelOverride: "",
   axisLabelSize: 24, tickLabelSize: 16,
@@ -104,7 +104,7 @@ const DEFAULT_GRAPH: GraphSettings = {
   xDtick: "0.5", yDtick: "",
   zeroLineColor: "grey", zeroLineStyle: "dot",
   gridColor: "#CCCCCC", gridStyle: "dot",
-  paperMode: false, paperColorScheme: "journal",
+  paperMode: true, paperColorScheme: "current",
 };
 
 function App() {
