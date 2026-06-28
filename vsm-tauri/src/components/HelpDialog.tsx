@@ -10,45 +10,44 @@ function IM({ children }: { children: string }) {
   return <InlineMath math={children} />;
 }
 
-// ── M-H ループ SVG（1枚・正確な形状） ──────────────────────────
+// ── M-H ループ SVG（補正後の正確な形状） ─────────────────────────
 function MHLoopSVG() {
-  // 座標系: W×H のキャンバス、中心 (cx,cy)
   const W = 340, H = 240;
   const cx = W / 2, cy = H / 2;
-  const Hmax = 130, Mmax = 88; // 描画スケール (px)
-  const Hc = 52, Mr = 66, Hs = 88; // 特性量の位置 (px)
+  const Hmax = 130, Mmax = 88;
+  const Hc = 52, Mr = 66, Hs = 88;
 
-  // 降磁場ブランチ: (+Hmax,+Ms) → (+Hc,0) → (0,-Mr) → (-Hmax,-Ms)
-  // 昇磁場ブランチ: (-Hmax,-Ms) → (-Hc,0) → (0,+Mr) → (+Hmax,+Ms)
-  // Cubic Bezier で S字カーブを表現
-  const down = `
-    M ${cx + Hmax} ${cy - Mmax}
-    C ${cx + Hmax} ${cy - Mmax * 0.3},
-      ${cx + Hc + 18} ${cy + 4},
-      ${cx + Hc} ${cy}
-    C ${cx + Hc - 12} ${cy - 4},
-      ${cx + 12} ${cy - Mr + 4},
-      ${cx} ${cy - Mr}
-    C ${cx - 12} ${cy - Mr - 4},
-      ${cx - Hmax} ${cy - Mmax * 0.3},
-      ${cx - Hmax} ${cy + Mmax}
-  `.trim();
+  // 反磁性補正済みループ:
+  //   降磁場ブランチ (H: +Hmax → −Hmax):
+  //     (+Hmax,+Ms) → (+Hs,+Ms) [飽和・水平] → S字スイッチング →
+  //     途中 (0,+Mr) と (−Hc,0) を通過 → (−Hs,−Ms) → (−Hmax,−Ms) [飽和・水平]
+  //   昇磁場ブランチ (H: −Hmax → +Hmax): 上記の点対称
+  const downPath = [
+    `M ${cx + Hmax} ${cy - Mmax}`,
+    `L ${cx + Hs} ${cy - Mmax}`,
+    `C ${cx + Hs * 0.42} ${cy - Mmax} ${cx + Hc * 0.48} ${cy - Mr} ${cx} ${cy - Mr}`,
+    `C ${cx - Hc * 0.48} ${cy - Mr} ${cx - Hc} ${cy - Mr * 0.28} ${cx - Hc} ${cy}`,
+    `C ${cx - Hc} ${cy + Mr * 0.28} ${cx - Hs * 0.42} ${cy + Mmax} ${cx - Hs} ${cy + Mmax}`,
+    `L ${cx - Hmax} ${cy + Mmax}`,
+  ].join(" ");
 
-  const up = `
-    M ${cx - Hmax} ${cy + Mmax}
-    C ${cx - Hmax} ${cy + Mmax * 0.3},
-      ${cx - Hc - 18} ${cy - 4},
-      ${cx - Hc} ${cy}
-    C ${cx - Hc + 12} ${cy + 4},
-      ${cx - 12} ${cy + Mr - 4},
-      ${cx} ${cy + Mr}
-    C ${cx + 12} ${cy + Mr + 4},
-      ${cx + Hmax} ${cy + Mmax * 0.3},
-      ${cx + Hmax} ${cy - Mmax}
-  `.trim();
+  const upPath = [
+    `M ${cx - Hmax} ${cy + Mmax}`,
+    `L ${cx - Hs} ${cy + Mmax}`,
+    `C ${cx - Hs * 0.42} ${cy + Mmax} ${cx - Hc * 0.48} ${cy + Mr} ${cx} ${cy + Mr}`,
+    `C ${cx + Hc * 0.48} ${cy + Mr} ${cx + Hc} ${cy + Mr * 0.28} ${cx + Hc} ${cy}`,
+    `C ${cx + Hc} ${cy - Mr * 0.28} ${cx + Hs * 0.42} ${cy - Mmax} ${cx + Hs} ${cy - Mmax}`,
+    `L ${cx + Hmax} ${cy - Mmax}`,
+  ].join(" ");
 
   const ax = { stroke: "#52525b", strokeWidth: 1 };
-  const label = { fontSize: 11, fill: "#a1a1aa" };
+  const lbl = { fontSize: 11, fill: "#a1a1aa" };
+  const s = 6; // 矢印サイズ
+
+  // 降磁場ブランチの矢印: 下部水平部（左向き）
+  const dx = cx - Hmax * 0.65, dy = cy + Mmax;
+  // 昇磁場ブランチの矢印: 上部水平部（右向き）
+  const ux = cx + Hmax * 0.65, uy = cy - Mmax;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
@@ -59,46 +58,42 @@ function MHLoopSVG() {
       <polygon points={`${W-10},${cy} ${W-18},${cy-4} ${W-18},${cy+4}`} fill="#52525b" />
       <polygon points={`${cx},8 ${cx-4},16 ${cx+4},16`} fill="#52525b" />
       {/* 軸ラベル */}
-      <text x={W - 8} y={cy - 6} {...label}>H</text>
-      <text x={cx + 5} y={14}    {...label}>M</text>
+      <text x={W - 8} y={cy - 6} {...lbl}>H</text>
+      <text x={cx + 5} y={14}    {...lbl}>M</text>
 
-      {/* 特性量の補助線 */}
-      {/* Ms */}
-      <line x1={10} y1={cy - Mmax} x2={W - 10} y2={cy - Mmax} stroke="#10b981" strokeWidth="1" strokeDasharray="4 3" opacity="0.7" />
-      <line x1={10} y1={cy + Mmax} x2={W - 10} y2={cy + Mmax} stroke="#10b981" strokeWidth="1" strokeDasharray="4 3" opacity="0.7" />
+      {/* Ms 補助線 */}
+      <line x1={10} y1={cy - Mmax} x2={W - 10} y2={cy - Mmax} stroke="#10b981" strokeWidth="1" strokeDasharray="4 3" opacity="0.6" />
+      <line x1={10} y1={cy + Mmax} x2={W - 10} y2={cy + Mmax} stroke="#10b981" strokeWidth="1" strokeDasharray="4 3" opacity="0.6" />
       <text x={8} y={cy - Mmax - 4} fontSize="10" fill="#10b981" fontWeight="bold">Ms</text>
       <text x={8} y={cy + Mmax + 11} fontSize="10" fill="#10b981" fontWeight="bold">−Ms</text>
 
-      {/* Mr */}
+      {/* Mr ティック (M軸 H=0 上) */}
       <line x1={cx - 6} y1={cy - Mr} x2={cx + 6} y2={cy - Mr} stroke="#f59e0b" strokeWidth="1.5" />
       <line x1={cx - 6} y1={cy + Mr} x2={cx + 6} y2={cy + Mr} stroke="#f59e0b" strokeWidth="1.5" />
       <text x={cx + 8} y={cy - Mr + 4} fontSize="10" fill="#f59e0b" fontWeight="bold">Mr</text>
-      <text x={cx + 8} y={cy + Mr + 4} fontSize="10" fill="#f59e0b" fontWeight="bold">−Mr</text>
+      <text x={cx + 8} y={cy + Mr + 5} fontSize="10" fill="#f59e0b" fontWeight="bold">−Mr</text>
 
-      {/* Hc */}
+      {/* Hc ティック (H軸 M=0 上): 昇磁場が +Hc、降磁場が −Hc でゼロ交差 */}
       <line x1={cx + Hc} y1={cy - 6} x2={cx + Hc} y2={cy + 6} stroke="#ef4444" strokeWidth="1.5" />
       <line x1={cx - Hc} y1={cy - 6} x2={cx - Hc} y2={cy + 6} stroke="#ef4444" strokeWidth="1.5" />
-      <text x={cx + Hc + 3} y={cy - 8} fontSize="10" fill="#ef4444" fontWeight="bold">Hc</text>
-      <text x={cx - Hc + 3} y={cy - 8} fontSize="10" fill="#ef4444" fontWeight="bold">−Hc</text>
+      <text x={cx + Hc - 6} y={cy - 9} fontSize="10" fill="#ef4444" fontWeight="bold">Hc</text>
+      <text x={cx - Hc - 16} y={cy - 9} fontSize="10" fill="#ef4444" fontWeight="bold">−Hc</text>
 
-      {/* Hs */}
+      {/* Hs ティック */}
       <line x1={cx + Hs} y1={cy - 5} x2={cx + Hs} y2={cy + 5} stroke="#a78bfa" strokeWidth="1.5" />
       <line x1={cx - Hs} y1={cy - 5} x2={cx - Hs} y2={cy + 5} stroke="#a78bfa" strokeWidth="1.5" />
-      <text x={cx + Hs + 3} y={cy + 14} fontSize="10" fill="#a78bfa" fontWeight="bold">Hs</text>
-      <text x={cx - Hs + 3} y={cy + 14} fontSize="10" fill="#a78bfa" fontWeight="bold">−Hs</text>
+      <text x={cx + Hs - 6} y={cy + 16} fontSize="10" fill="#a78bfa" fontWeight="bold">Hs</text>
+      <text x={cx - Hs - 16} y={cy + 16} fontSize="10" fill="#a78bfa" fontWeight="bold">−Hs</text>
 
       {/* ループ */}
-      <path d={down} fill="none" stroke="#6366f1" strokeWidth="2.2" strokeLinejoin="round" />
-      <path d={up}   fill="none" stroke="#6366f1" strokeWidth="2.2" strokeLinejoin="round" />
+      <path d={downPath} fill="none" stroke="#6366f1" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={upPath}   fill="none" stroke="#6366f1" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
 
-      {/* 方向矢印 */}
-      <defs>
-        <marker id="arr" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
-          <path d="M0,0 L7,3.5 L0,7 Z" fill="#6366f1" opacity="0.8" />
-        </marker>
-      </defs>
-      <line x1={cx + Hmax - 2} y1={cy - Mmax + 14} x2={cx + Hmax - 2} y2={cy - Mmax + 2} stroke="none" markerEnd="url(#arr)" />
-      <line x1={cx - Hmax + 2} y1={cy + Mmax - 14} x2={cx - Hmax + 2} y2={cy + Mmax - 2} stroke="none" markerEnd="url(#arr)" />
+      {/* 方向矢印（実体 polygon） */}
+      {/* 降磁場: 下部水平部を左向きに走行 */}
+      <polygon points={`${dx+s},${dy-s*0.7} ${dx-s*0.5},${dy} ${dx+s},${dy+s*0.7}`} fill="#6366f1" opacity="0.9" />
+      {/* 昇磁場: 上部水平部を右向きに走行 */}
+      <polygon points={`${ux-s},${uy-s*0.7} ${ux+s*0.5},${uy} ${ux-s},${uy+s*0.7}`} fill="#6366f1" opacity="0.9" />
     </svg>
   );
 }
