@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FileEntry, UnitMode, GraphSettings, PaperColorScheme } from "../App";
 import type { AnalysisParams, FileCalcSettings, FileWithPath } from "../api/client";
 import { openVSMFiles } from "../api/client";
-import type { ExportOptions } from "../utils/graphExport";
 import { searchSuggestions, getCurrentToken } from "../utils/legendSuggestions";
 import type { Suggestion } from "../utils/legendSuggestions";
+import ExportDialog from "./ExportDialog";
 
 // ── Props ──────────────────────────
 interface Props {
@@ -27,8 +27,6 @@ interface Props {
   onApplyFirstToAll:     () => void;
   onSaveSession:         () => Promise<boolean>;
   onLoadSession:         () => void;
-  onSaveGraph:           (opts: ExportOptions) => Promise<boolean>;
-  onCopyGraph:           (scale: number) => Promise<void>;
 }
 
 type Tab = "analysis" | "graph" | "save" | "log";
@@ -380,11 +378,6 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
               ]}
               onChange={(v) => onCalcChange({ perDemagMode: v as FileCalcSettings["perDemagMode"] })}
             />
-            <p className="text-xs text-zinc-600 mb-2">
-              {demagMode === "" ? `GBL = グローバル設定 (${params.demagMode === "auto" ? "自動" : "なし"}) を使用` :
-               demagMode === "auto" ? "高磁場領域の傾きを自動検出" :
-               demagMode === "manual" ? "磁場範囲を手動で指定" : "補正を行わない"}
-            </p>
             {demagMode === "manual" && (
               <div className="space-y-1 pl-2 border-l-2 border-indigo-800/60">
                 <RangeInput label="正側" min={String(s.demagPosMin ?? 0.5)} max={String(s.demagPosMax ?? 2.0)}
@@ -442,9 +435,7 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
                   正負連動
                 </label>
               </div>
-            ) : (
-              <p className="text-xs text-zinc-600">全磁場域の飽和値から自動計算</p>
-            )}
+            ) : null}
           </div>
 
         </div>
@@ -511,7 +502,6 @@ function AnalysisTab({ entries, params, unitMode, onLoadFiles, onAddFiles, onCle
       )}
 
       <Section title="サンプル情報（デフォルト）">
-        <p className="text-xs text-zinc-600 mb-3">各ファイルの ⚙ で個別上書き可能</p>
         <NumberInput label="膜厚 (nm)" value={params.thickness} step={1} min={0.1}
           onChange={(v) => onParamsChange({ thickness: v })} />
         <NumberInput label="面積 (mm²)" value={params.area} step={1} min={0.1}
@@ -548,378 +538,465 @@ function AnalysisTab({ entries, params, unitMode, onLoadFiles, onAddFiles, onCle
   );
 }
 
-// ── グラフ設定タブ ──────────────────────────
-function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; onChange: (next: Partial<GraphSettings>) => void }) {
-  return (
-    <div className="flex-1 overflow-y-auto">
+// ── グラフタブ用ヘルパー ──────────────────────────────────────
 
-      {/* ── 論文モード ── */}
-      <Section title="論文モード">
-        <Toggle
-          label="論文モード（白背景・黒軸・四辺枠）"
-          checked={graphSettings.paperMode}
-          onChange={(v) => onChange({ paperMode: v })}
-        />
-        {graphSettings.paperMode && (
-          <div className="mt-3 space-y-2">
-            <label className="text-xs text-zinc-400 block mb-1.5">配色スキーム</label>
-            {(
-              [
-                { value: "current",  label: "現在の色そのまま" },
-                { value: "journal",  label: "ジャーナル標準色" },
-                { value: "grayscale", label: "グレースケール（モノクロ印刷対応）" },
-              ] as { value: PaperColorScheme; label: string }[]
-            ).map((opt) => (
-              <label key={opt.value} className="flex items-center gap-2 cursor-pointer group">
-                <input
-                  type="radio"
-                  name="paperColorScheme"
-                  value={opt.value}
-                  checked={graphSettings.paperColorScheme === opt.value}
-                  onChange={() => onChange({ paperColorScheme: opt.value })}
-                  className="accent-indigo-500"
-                />
-                <span className="text-xs text-zinc-300 group-hover:text-zinc-100 transition-colors">
-                  {opt.label}
-                </span>
-              </label>
+function GLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-[9px] font-bold text-zinc-600 tracking-widest uppercase mb-1.5">{children}</p>;
+}
+
+function Pill({ active, onClick, children, wide }: {
+  active: boolean; onClick: () => void; children: React.ReactNode; wide?: boolean;
+}) {
+  return (
+    <button onClick={onClick}
+      className={`${wide ? "flex-1" : ""} px-2 py-1.5 text-[11px] font-medium rounded transition-colors ${
+        active
+          ? "bg-indigo-700/50 text-indigo-200 ring-1 ring-inset ring-indigo-600/50"
+          : "bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+      }`}>
+      {children}
+    </button>
+  );
+}
+
+function CInput({ value, onChange, placeholder, type = "text", step }: {
+  value: string | number; onChange: (v: string) => void;
+  placeholder?: string; type?: string; step?: string;
+}) {
+  return (
+    <input type={type} value={value} placeholder={placeholder} step={step}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full bg-zinc-800/80 border border-zinc-700/60 text-zinc-100 text-xs rounded px-2 py-1.5 text-center focus:outline-none focus:border-indigo-500/70 placeholder:text-zinc-700"
+    />
+  );
+}
+
+// ── 凡例位置ポップオーバーピッカー ────────────────────────────
+const LEGEND_POSITIONS = [
+  "top-left",    "top-center",    "top-right",
+  "mid-left",    "center",        "mid-right",
+  "bottom-left", "bottom-center", "bottom-right",
+] as const;
+
+const POS_LABEL: Record<string, string> = {
+  "top-left": "左上", "top-center": "上中", "top-right": "右上",
+  "mid-left": "左中", "center":     "中央", "mid-right": "右中",
+  "bottom-left": "左下", "bottom-center": "下中", "bottom-right": "右下",
+};
+
+function LegendPositionPicker({ value, onChange }: {
+  value: GraphSettings["legendPosition"];
+  onChange: (pos: GraphSettings["legendPosition"]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null);
+
+  const openPicker = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) setPopPos({ top: rect.bottom + 4, left: rect.left });
+    setOpen((o) => !o);
+  };
+
+  const select = (pos: GraphSettings["legendPosition"]) => {
+    onChange(pos);
+    setOpen(false);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!btnRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const currentIdx = LEGEND_POSITIONS.indexOf(value as typeof LEGEND_POSITIONS[number]);
+
+  const popup = open && popPos && createPortal(
+    <div
+      style={{ position: "fixed", top: popPos.top, left: popPos.left, zIndex: 9999 }}
+      className="bg-zinc-800 border border-zinc-600/80 rounded-lg shadow-2xl p-1.5"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="grid grid-cols-3 gap-1">
+        {LEGEND_POSITIONS.map((pos) => {
+          const active = value === pos;
+          return (
+            <button key={pos} onClick={() => select(pos as GraphSettings["legendPosition"])}
+              title={POS_LABEL[pos]}
+              className={`w-9 h-7 rounded flex items-center justify-center transition-colors ${
+                active
+                  ? "bg-indigo-600 border border-indigo-400/60"
+                  : "bg-zinc-700/70 border border-zinc-600/40 hover:bg-zinc-600/60"
+              }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white" : "bg-zinc-500"}`} />
+            </button>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  );
+
+  return (
+    <>
+      <button ref={btnRef} onClick={openPicker}
+        className="flex items-center gap-2 px-2 py-1.5 rounded border border-zinc-700/60 bg-zinc-800/60 hover:bg-zinc-700/60 hover:border-zinc-600 transition-colors w-full mb-2"
+        title="凡例の表示位置を選択">
+        <div className="grid grid-cols-3 gap-px shrink-0" style={{ width: 21, height: 15 }}>
+          {LEGEND_POSITIONS.map((pos, i) => (
+            <div key={pos} style={{ width: 5, height: 4 }}
+              className={`rounded-sm ${currentIdx === i ? "bg-indigo-400" : "bg-zinc-600"}`} />
+          ))}
+        </div>
+        <span className="text-[11px] text-zinc-300 flex-1 text-left">{POS_LABEL[value] ?? value}</span>
+        <svg viewBox="0 0 10 6" className={`w-2.5 h-1.5 fill-current text-zinc-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}>
+          <path d="M5 6L0 0h10z"/>
+        </svg>
+      </button>
+      {popup}
+    </>
+  );
+}
+
+// ── 基本パネル ────────────────────────────
+function BasicPanel({ g, ch }: { g: GraphSettings; ch: (p: Partial<GraphSettings>) => void }) {
+  return (
+    <div className="space-y-4">
+
+      {/* 論文モード */}
+      <div>
+        <GLabel>出力モード</GLabel>
+        <button onClick={() => ch({ paperMode: !g.paperMode })}
+          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all ${
+            g.paperMode
+              ? "bg-indigo-950/50 border-indigo-700/60 text-indigo-200"
+              : "bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:border-zinc-600"
+          }`}>
+          <span className="text-xs font-semibold">論文モード</span>
+          <span className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${g.paperMode ? "bg-indigo-500" : "bg-zinc-600"}`}>
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${g.paperMode ? "left-4" : "left-0.5"}`} />
+          </span>
+        </button>
+        {g.paperMode && (
+          <div className="flex gap-1 mt-1.5">
+            {([
+              { value: "current",   label: "現在色" },
+              { value: "journal",   label: "Journal" },
+              { value: "grayscale", label: "Grayscale" },
+            ] as { value: PaperColorScheme; label: string }[]).map((opt) => (
+              <Pill key={opt.value} wide active={g.paperColorScheme === opt.value}
+                onClick={() => ch({ paperColorScheme: opt.value })}>
+                {opt.label}
+              </Pill>
             ))}
           </div>
         )}
-      </Section>
+      </div>
 
-      <Section title="表示">
-        <Toggle label="凡例を表示"      checked={graphSettings.showLegend}    onChange={(v) => onChange({ showLegend: v })} />
-        <Toggle label="グリッド線を表示" checked={graphSettings.showGrid}      onChange={(v) => onChange({ showGrid: v })} />
-        <Toggle label="原点線を表示"    checked={graphSettings.showZeroLines} onChange={(v) => onChange({ showZeroLines: v })} />
-      </Section>
-
-      <Section title="凡例">
-        <Select label="位置" value={graphSettings.legendPosition}
-          options={[
-            { value: "top-right",    label: "右上" },
-            { value: "top-left",     label: "左上" },
-            { value: "bottom-right", label: "右下" },
-            { value: "bottom-left",  label: "左下" },
-          ]}
-          onChange={(v) => onChange({ legendPosition: v as GraphSettings["legendPosition"] })}
-        />
-        <NumberInput label="フォントサイズ" value={graphSettings.legendFontSize} step={1} min={6}
-          onChange={(v) => onChange({ legendFontSize: v })} />
-      </Section>
-
-      <Section title="軸ラベル">
-        <div className="mb-3">
-          <label className="text-xs text-zinc-400 block mb-1">X 軸ラベル（空欄 = 自動）</label>
-          <input type="text" value={graphSettings.xLabelOverride}
-            placeholder="例: μ₀H (T)"
-            onChange={(e) => onChange({ xLabelOverride: e.target.value })}
-            className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-          />
+      {/* 表示トグル */}
+      <div>
+        <GLabel>表示</GLabel>
+        <div className="grid grid-cols-3 gap-1">
+          <Pill wide active={g.showLegend}    onClick={() => ch({ showLegend:    !g.showLegend    })}>凡例</Pill>
+          <Pill wide active={g.showGrid}      onClick={() => ch({ showGrid:      !g.showGrid      })}>グリッド</Pill>
+          <Pill wide active={g.showZeroLines} onClick={() => ch({ showZeroLines: !g.showZeroLines })}>原点線</Pill>
         </div>
-        <div className="mb-3">
-          <label className="text-xs text-zinc-400 block mb-1">Y 軸ラベル（空欄 = 自動）</label>
-          <input type="text" value={graphSettings.yLabelOverride}
-            placeholder="例: M (kA/m)"
-            onChange={(e) => onChange({ yLabelOverride: e.target.value })}
-            className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-          />
+      </div>
+
+      {/* 描画範囲 */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <GLabel>描画範囲</GLabel>
+          <button onClick={() => ch({ xMin: "", xMax: "", yMin: "", yMax: "" })}
+            className="text-[10px] text-zinc-600 hover:text-indigo-400 transition-colors">
+            リセット
+          </button>
         </div>
-        <NumberInput label="軸ラベルフォントサイズ" value={graphSettings.axisLabelSize} step={1} min={6}
-          onChange={(v) => onChange({ axisLabelSize: v })} />
-        <NumberInput label="目盛りフォントサイズ" value={graphSettings.tickLabelSize} step={1} min={6}
-          onChange={(v) => onChange({ tickLabelSize: v })} />
-      </Section>
-
-      <Section title="描画範囲（空欄 = 自動）">
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <div>
-            <label className="text-xs text-zinc-400 block mb-1">X 最小</label>
-            <input type="number" value={graphSettings.xMin} placeholder="auto"
-              onChange={(e) => onChange({ xMin: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-400 block mb-1">X 最大</label>
-            <input type="number" value={graphSettings.xMax} placeholder="auto"
-              onChange={(e) => onChange({ xMax: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-400 block mb-1">Y 最小</label>
-            <input type="number" value={graphSettings.yMin} placeholder="auto"
-              onChange={(e) => onChange({ yMin: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-400 block mb-1">Y 最大</label>
-            <input type="number" value={graphSettings.yMax} placeholder="auto"
-              onChange={(e) => onChange({ yMax: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-        </div>
-        <button onClick={() => onChange({ xMin: "", xMax: "", yMin: "", yMax: "" })}
-          className="w-full bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs py-1.5 px-3 rounded transition-colors">
-          範囲をリセット (自動)
-        </button>
-      </Section>
-
-      <Section title="プロット">
-        <NumberInput label="線幅" value={graphSettings.lineWidth} step={0.5} min={0.5}
-          onChange={(v) => onChange({ lineWidth: v })} />
-        <NumberInput label="マーカーサイズ（0 = なし）" value={graphSettings.markerSize} step={1} min={0}
-          onChange={(v) => onChange({ markerSize: v })} />
-        <Select label="マーカー形状" value={graphSettings.markerSymbol}
-          options={[
-            { value: "circle",      label: "○ 丸" },
-            { value: "square",      label: "□ 四角" },
-            { value: "diamond",     label: "◇ ひし形" },
-            { value: "triangle-up", label: "△ 三角" },
-            { value: "cross",       label: "+ クロス" },
-            { value: "x",           label: "× バツ" },
-          ]}
-          onChange={(v) => onChange({ markerSymbol: v })}
-        />
-      </Section>
-
-      <Section title="目盛り書式">
-        {/* 目盛り間隔 */}
-        <div className="mb-3">
-          <p className="text-xs text-zinc-500 mb-2">目盛り間隔（空欄 = 自動）</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-zinc-400 block mb-1">X 間隔</label>
-              <input type="number" value={graphSettings.xDtick ?? ""} step="any" min={0}
-                placeholder="auto"
-                onChange={(e) => onChange({ xDtick: e.target.value })}
-                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
-              />
+        <div className="space-y-1">
+          {([
+            { axis: "X", minKey: "xMin", maxKey: "xMax" },
+            { axis: "Y", minKey: "yMin", maxKey: "yMax" },
+          ] as { axis: string; minKey: "xMin" | "xMax"; maxKey: "xMin" | "xMax" }[]).map(({ axis, minKey, maxKey }) => (
+            <div key={axis} className="flex items-center gap-1.5">
+              <span className="text-[10px] text-zinc-600 w-3 text-center shrink-0">{axis}</span>
+              <CInput type="number" value={g[minKey]} placeholder="min" onChange={(v) => ch({ [minKey]: v })} />
+              <span className="text-zinc-700 text-xs shrink-0">—</span>
+              <CInput type="number" value={g[maxKey]} placeholder="max" onChange={(v) => ch({ [maxKey]: v })} />
             </div>
-            <div>
-              <label className="text-xs text-zinc-400 block mb-1">Y 間隔</label>
-              <input type="number" value={graphSettings.yDtick ?? ""} step="any" min={0}
-                placeholder="auto"
-                onChange={(e) => onChange({ yDtick: e.target.value })}
-                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500 placeholder:text-zinc-600"
-              />
+          ))}
+        </div>
+      </div>
+
+      {/* 凡例位置・列数 */}
+      {g.showLegend && (
+        <div>
+          <GLabel>凡例位置</GLabel>
+          <LegendPositionPicker value={g.legendPosition} onChange={(pos) => ch({ legendPosition: pos })} />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-zinc-600 shrink-0">列数</span>
+            <div className="flex gap-1 flex-1">
+              {[1, 2, 3].map((n) => (
+                <Pill key={n} wide active={g.legendColumns === n} onClick={() => ch({ legendColumns: n })}>
+                  {n}列
+                </Pill>
+              ))}
             </div>
           </div>
         </div>
-        {/* 目盛りラベル書式 */}
-        <Select label="X ラベル書式" value={graphSettings.xTickFormat}
-          options={[
-            { value: "",     label: "自動" },
-            { value: ".0f",  label: "整数 (例: 1)" },
-            { value: ".1f",  label: "小数1桁 (例: 1.0)" },
-            { value: ".2f",  label: "小数2桁 (例: 1.00)" },
-            { value: ".3f",  label: "小数3桁 (例: 1.000)" },
-            { value: ".2g",  label: "有効数字2桁" },
-            { value: ".3g",  label: "有効数字3桁" },
-            { value: ".2e",  label: "指数表記 (例: 1.00e+0)" },
-          ]}
-          onChange={(v) => onChange({ xTickFormat: v })}
-        />
-        <Select label="Y ラベル書式" value={graphSettings.yTickFormat}
-          options={[
-            { value: "",     label: "自動" },
-            { value: ".0f",  label: "整数 (例: 100)" },
-            { value: ".1f",  label: "小数1桁 (例: 100.0)" },
-            { value: ".2f",  label: "小数2桁 (例: 100.00)" },
-            { value: ".2g",  label: "有効数字2桁" },
-            { value: ".3g",  label: "有効数字3桁" },
-            { value: ".2e",  label: "指数表記 (例: 1.00e+2)" },
-          ]}
-          onChange={(v) => onChange({ yTickFormat: v })}
-        />
-      </Section>
+      )}
 
-      <Section title="線スタイル">
-        <Select label="原点線のスタイル" value={graphSettings.zeroLineStyle}
-          options={[
-            { value: "solid", label: "実線 ──" },
-            { value: "dash",  label: "破線 --" },
-            { value: "dot",   label: "点線 ···" },
-          ]}
-          onChange={(v) => onChange({ zeroLineStyle: v })}
-        />
-        <div className="mb-3">
-          <label className="text-xs text-zinc-400 block mb-1">原点線の色</label>
+      {/* プロット */}
+      <div>
+        <GLabel>プロット</GLabel>
+        <div className="space-y-2.5">
+          {/* 線幅スライダー */}
           <div className="flex items-center gap-2">
-            <input type="color" value={graphSettings.zeroLineColor}
-              onChange={(e) => onChange({ zeroLineColor: e.target.value })}
-              className="w-8 h-8 rounded cursor-pointer border border-zinc-600 bg-transparent"
-            />
-            <span className="text-xs text-zinc-400">{graphSettings.zeroLineColor}</span>
+            <span className="text-[10px] text-zinc-500 w-10 shrink-0">線幅</span>
+            <input type="range" min={0.5} max={5} step={0.5} value={g.lineWidth}
+              onChange={(e) => ch({ lineWidth: parseFloat(e.target.value) })}
+              className="flex-1 accent-indigo-500 cursor-pointer" />
+            <span className="text-[11px] text-zinc-300 font-mono w-5 text-right shrink-0">{g.lineWidth}</span>
           </div>
-        </div>
-        <Select label="グリッドのスタイル" value={graphSettings.gridStyle}
-          options={[
-            { value: "solid", label: "実線 ──" },
-            { value: "dash",  label: "破線 --" },
-            { value: "dot",   label: "点線 ···" },
-          ]}
-          onChange={(v) => onChange({ gridStyle: v })}
-        />
-        <div className="mb-3">
-          <label className="text-xs text-zinc-400 block mb-1">グリッドの色</label>
+          {/* マーカーサイズスライダー */}
           <div className="flex items-center gap-2">
-            <input type="color" value={graphSettings.gridColor}
-              onChange={(e) => onChange({ gridColor: e.target.value })}
-              className="w-8 h-8 rounded cursor-pointer border border-zinc-600 bg-transparent"
-            />
-            <span className="text-xs text-zinc-400">{graphSettings.gridColor}</span>
+            <span className="text-[10px] text-zinc-500 w-10 shrink-0">点サイズ</span>
+            <input type="range" min={0} max={12} step={1} value={g.markerSize}
+              onChange={(e) => ch({ markerSize: parseInt(e.target.value) })}
+              className="flex-1 accent-indigo-500 cursor-pointer" />
+            <span className="text-[11px] text-zinc-300 font-mono w-5 text-right shrink-0">
+              {g.markerSize === 0 ? "off" : g.markerSize}
+            </span>
           </div>
+          {/* マーカー形状ピル */}
+          {g.markerSize > 0 && (
+            <div className="flex gap-1">
+              {([
+                ["circle",      "●"],
+                ["square",      "■"],
+                ["diamond",     "◆"],
+                ["triangle-up", "▲"],
+                ["cross",       "+"],
+                ["x",           "×"],
+              ] as [string, string][]).map(([sym, icon]) => (
+                <Pill key={sym} wide active={g.markerSymbol === sym} onClick={() => ch({ markerSymbol: sym })}>
+                  {icon}
+                </Pill>
+              ))}
+            </div>
+          )}
         </div>
-      </Section>
+      </div>
+
+    </div>
+  );
+}
+
+// ── 軸・目盛りパネル ─────────────────────────
+function AxisPanel({ g, ch }: { g: GraphSettings; ch: (p: Partial<GraphSettings>) => void }) {
+  return (
+    <div className="space-y-4">
+
+      {/* 軸ラベル上書き */}
+      <div>
+        <GLabel>軸ラベル</GLabel>
+        <div className="space-y-1.5">
+          {([
+            { axis: "X", key: "xLabelOverride" as const, ph: "例: μ₀H (T)" },
+            { axis: "Y", key: "yLabelOverride" as const, ph: "例: M (kA/m)" },
+          ]).map(({ axis, key, ph }) => (
+            <div key={axis} className="flex items-center gap-2">
+              <span className="text-[10px] text-zinc-600 w-3 shrink-0 text-center">{axis}</span>
+              <input type="text" value={g[key]} placeholder={ph}
+                onChange={(e) => ch({ [key]: e.target.value })}
+                className="flex-1 bg-zinc-800/80 border border-zinc-700/60 text-zinc-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500/70 placeholder:text-zinc-700"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* フォントサイズ */}
+      <div>
+        <GLabel>フォントサイズ</GLabel>
+        <div className="grid grid-cols-3 gap-1.5">
+          {([
+            { label: "軸ラベル", key: "axisLabelSize"  as const },
+            { label: "目盛り",   key: "tickLabelSize"  as const },
+            { label: "凡例",     key: "legendFontSize" as const },
+          ]).map(({ label, key }) => (
+            <div key={key} className="text-center">
+              <p className="text-[9px] text-zinc-600 mb-1">{label}</p>
+              <input type="number" value={g[key]} min={6} step={1}
+                onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 6) ch({ [key]: v }); }}
+                className="w-full bg-zinc-800/80 border border-zinc-700/60 text-zinc-100 text-xs rounded px-1 py-1.5 text-center focus:outline-none focus:border-indigo-500/70"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 軸ラベル余白 */}
+      <div>
+        <GLabel>軸ラベル余白 (px)</GLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          {([
+            { label: "下 (X軸)", key: "marginB" as const },
+            { label: "左 (Y軸)", key: "marginL" as const },
+          ]).map(({ label, key }) => (
+            <div key={key} className="text-center">
+              <p className="text-[9px] text-zinc-600 mb-1">{label}</p>
+              <input type="number" value={g[key] ?? (key === "marginB" ? 70 : 90)} min={20} max={200} step={5}
+                onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 20) ch({ [key]: v }); }}
+                className="w-full bg-zinc-800/80 border border-zinc-700/60 text-zinc-100 text-xs rounded px-1 py-1.5 text-center focus:outline-none focus:border-indigo-500/70"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 目盛り間隔 */}
+      <div>
+        <GLabel>目盛り間隔</GLabel>
+        <div className="flex gap-1.5 mb-2">
+          {([
+            { axis: "X", key: "xDtick" as const },
+            { axis: "Y", key: "yDtick" as const },
+          ]).map(({ axis, key }) => (
+            <div key={axis} className="flex items-center gap-1 flex-1">
+              <span className="text-[10px] text-zinc-600 shrink-0">{axis}</span>
+              <CInput type="number" value={g[key] ?? ""} placeholder="auto" step="any"
+                onChange={(v) => ch({ [key]: v })} />
+            </div>
+          ))}
+        </div>
+        {/* 補助目盛り */}
+        <div className="flex items-center gap-1.5">
+          <Pill active={g.showMinorTicks ?? true}
+            onClick={() => ch({ showMinorTicks: !(g.showMinorTicks ?? true) })}>
+            補助目盛り
+          </Pill>
+          {(g.showMinorTicks ?? true) && (
+            <select value={String(g.minorDivisions ?? 5)}
+              onChange={(e) => ch({ minorDivisions: Number(e.target.value) })}
+              className="flex-1 bg-zinc-800/80 border border-zinc-700/60 text-zinc-300 text-[11px] rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500/70"
+            >
+              <option value="2">÷2（間1本）</option>
+              <option value="4">÷4（間3本）</option>
+              <option value="5">÷5（間4本）</option>
+              <option value="10">÷10（間9本）</option>
+            </select>
+          )}
+        </div>
+      </div>
+
+      {/* 目盛りラベル書式 */}
+      <div>
+        <GLabel>目盛りラベル書式</GLabel>
+        <div className="grid grid-cols-2 gap-1.5">
+          {([
+            { label: "X", key: "xTickFormat" as const },
+            { label: "Y", key: "yTickFormat" as const },
+          ]).map(({ label, key }) => (
+            <div key={key}>
+              <p className="text-[9px] text-zinc-600 mb-1">{label}</p>
+              <select value={g[key]} onChange={(e) => ch({ [key]: e.target.value })}
+                className="w-full bg-zinc-800/80 border border-zinc-700/60 text-zinc-300 text-[11px] rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500/70"
+              >
+                <option value="">自動</option>
+                <option value=".0f">整数</option>
+                <option value=".1f">小数1桁</option>
+                <option value=".2f">小数2桁</option>
+                <option value=".3f">小数3桁</option>
+                <option value=".2g">有効数字2桁</option>
+                <option value=".3g">有効数字3桁</option>
+                <option value=".2e">指数表記</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 線スタイル */}
+      <div>
+        <GLabel>線スタイル</GLabel>
+        {([
+          { label: "原点線", styleKey: "zeroLineStyle" as const, colorKey: "zeroLineColor" as const },
+          { label: "グリッド", styleKey: "gridStyle"    as const, colorKey: "gridColor"    as const },
+        ]).map(({ label, styleKey, colorKey }) => (
+          <div key={styleKey} className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-[10px] text-zinc-500 w-12 shrink-0">{label}</span>
+            <select value={g[styleKey]} onChange={(e) => ch({ [styleKey]: e.target.value })}
+              className="flex-1 bg-zinc-800/80 border border-zinc-700/60 text-zinc-300 text-[11px] rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500/70"
+            >
+              <option value="solid">実線 ──</option>
+              <option value="dash">破線 --</option>
+              <option value="dot">点線 ···</option>
+            </select>
+            <input type="color" value={g[colorKey]}
+              onChange={(e) => ch({ [colorKey]: e.target.value })}
+              className="w-8 h-7 rounded cursor-pointer border border-zinc-700 bg-transparent shrink-0"
+            />
+          </div>
+        ))}
+      </div>
+
+    </div>
+  );
+}
+
+// ── グラフ設定タブ ──────────────────────────
+function GraphTab({ graphSettings, onChange }: { graphSettings: GraphSettings; onChange: (next: Partial<GraphSettings>) => void }) {
+  const [sub, setSub] = useState<"basic" | "axis">("basic");
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* サブタブ */}
+      <div className="flex shrink-0 gap-1 px-3 pt-3">
+        {(["basic", "axis"] as const).map((id) => (
+          <button key={id} onClick={() => setSub(id)}
+            className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
+              sub === id
+                ? "bg-indigo-700/40 text-indigo-200 ring-1 ring-inset ring-indigo-600/40"
+                : "text-zinc-500 hover:text-zinc-300 bg-zinc-800/40 hover:bg-zinc-800"
+            }`}>
+            {id === "basic" ? "基本" : "軸・目盛り"}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {sub === "basic"
+          ? <BasicPanel g={graphSettings} ch={onChange} />
+          : <AxisPanel  g={graphSettings} ch={onChange} />
+        }
+      </div>
     </div>
   );
 }
 
 // ── 保存タブ ──────────────────────────
-function SaveTab({ onSave, onLoad, hasEntries, onSaveGraph, onCopyGraph }: {
+function SaveTab({ onSave, onLoad, hasEntries }: {
   onSave: () => Promise<boolean>; onLoad: () => void; hasEntries: boolean;
-  onSaveGraph: (opts: ExportOptions) => Promise<boolean>;
-  onCopyGraph: (scale: number) => Promise<void>;
 }) {
-
-  const [format,        setFormat]        = useState<ExportOptions["format"]>("png");
-  const [scale,         setScale]         = useState(2);
-  const [useCustomSize, setUseCustomSize] = useState(false);
-  const [width,         setWidth]         = useState(1200);
-  const [height,        setHeight]        = useState(900);
-  const [saving,        setSaving]        = useState(false);
-  const [copying,       setCopying]       = useState(false);
-  const [msg,           setMsg]           = useState<{ text: string; ok: boolean } | null>(null);
-
-  const flash = (text: string, ok: boolean) => {
-    setMsg({ text, ok });
-    setTimeout(() => setMsg(null), 2500);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const saved = await onSaveGraph({ format, scale, useCustomSize, width, height });
-      if (saved) flash("保存しました", true);
-    } catch (e: unknown) {
-      flash((e as Error).message ?? "保存に失敗しました", false);
-    } finally { setSaving(false); }
-  };
-
-  const handleCopy = async () => {
-    setCopying(true);
-    try {
-      await onCopyGraph(scale);
-      flash("クリップボードにコピーしました", true);
-    } catch (e: unknown) {
-      flash((e as Error).message ?? "コピーに失敗しました", false);
-    } finally { setCopying(false); }
-  };
-
-  const SCALES = [1, 2, 3, 4];
-  const FORMATS: { value: ExportOptions["format"]; label: string }[] = [
-    { value: "png",  label: "PNG" },
-    { value: "svg",  label: "SVG" },
-    { value: "jpeg", label: "JPEG" },
-  ];
+  const [showExport, setShowExport] = useState(false);
 
   return (
     <div className="flex-1 overflow-y-auto">
+      {showExport && <ExportDialog onClose={() => setShowExport(false)} />}
 
       {/* ── グラフ画像 ── */}
       <Section title="グラフ画像出力">
-
-        {/* 形式 */}
-        <div className="mb-3">
-          <label className="text-xs text-zinc-400 block mb-1.5">ファイル形式</label>
-          <div className="flex rounded-md overflow-hidden border border-zinc-700">
-            {FORMATS.map((f, i) => (
-              <button key={f.value} onClick={() => setFormat(f.value)}
-                className={`flex-1 text-xs py-1.5 font-medium transition-colors ${
-                  format === f.value ? "bg-indigo-600 text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                } ${i > 0 ? "border-l border-zinc-700" : ""}`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 解像度倍率 */}
-        <div className="mb-3">
-          <label className="text-xs text-zinc-400 block mb-1.5">解像度倍率</label>
-          <div className="flex rounded-md overflow-hidden border border-zinc-700">
-            {SCALES.map((s, i) => (
-              <button key={s} onClick={() => setScale(s)}
-                className={`flex-1 text-xs py-1.5 font-mono transition-colors ${
-                  scale === s ? "bg-indigo-600 text-white font-bold" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                } ${i > 0 ? "border-l border-zinc-700" : ""}`}>
-                ×{s}
-              </button>
-            ))}
-          </div>
-          <p className="text-[10px] text-zinc-600 mt-1">×2 = 画面サイズの2倍 (推奨)</p>
-        </div>
-
-        {/* カスタムサイズ */}
-        <div className="mb-4">
-          <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer mb-2">
-            <input type="checkbox" checked={useCustomSize} onChange={(e) => setUseCustomSize(e.target.checked)}
-              className="accent-indigo-500" />
-            カスタムサイズ (px)
-          </label>
-          {useCustomSize && (
-            <div className="grid grid-cols-2 gap-2 pl-4 border-l-2 border-indigo-800/40">
-              <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">幅</label>
-                <input type="number" value={width} min={100} step={100}
-                  onChange={(e) => setWidth(Number(e.target.value))}
-                  className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">高さ</label>
-                <input type="number" value={height} min={100} step={100}
-                  onChange={(e) => setHeight(Number(e.target.value))}
-                  className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* フィードバックメッセージ */}
-        {msg && (
-          <div className={`text-xs px-3 py-1.5 rounded mb-3 ${
-            msg.ok ? "bg-emerald-900/40 text-emerald-300 border border-emerald-800/50"
-                   : "bg-red-900/40 text-red-300 border border-red-800/50"
-          }`}>
-            {msg.text}
-          </div>
-        )}
-
-        {/* ボタン */}
-        <button onClick={handleSave} disabled={saving}
-          className="w-full flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium py-2 px-3 rounded mb-2 transition-colors">
-          <span>{saving ? "保存中..." : "💾 ダウンロード"}</span>
+        <button onClick={() => setShowExport(true)}
+          className="w-full flex items-center justify-center gap-2 bg-indigo-700 hover:bg-indigo-600 text-white text-sm font-medium py-2 px-3 rounded transition-colors">
+          🖼 画像を出力...
         </button>
-        {format !== "svg" && (
-          <button onClick={handleCopy} disabled={copying}
-            className="w-full flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-100 text-sm py-2 px-3 rounded transition-colors">
-            <span>{copying ? "コピー中..." : "📋 クリップボードにコピー"}</span>
-          </button>
-        )}
       </Section>
 
       {/* ── セッション ── */}
       <Section title="セッション">
-        <p className="text-xs text-zinc-500 mb-3">
-          ファイルデータと全設定を <code className="text-indigo-400">.vsm_session</code> に保存し次回復元できます
-        </p>
-        <button onClick={async () => { const saved = await onSave(); if (saved) flash("セッションを保存しました", true); }}
+        <button onClick={async () => { await onSave(); }}
           disabled={!hasEntries}
           className="w-full bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-zinc-100 text-sm py-2 px-3 rounded mb-2 transition-colors">
           セッションを保存...
@@ -933,12 +1010,47 @@ function SaveTab({ onSave, onLoad, hasEntries, onSaveGraph, onCopyGraph }: {
   );
 }
 
+// ── ログタブ用定数 ────────────────────────────────────────────
+const META_DISPLAY: { key: string; label: string }[] = [
+  { key: "date",                       label: "測定日" },
+  { key: "sample name",                label: "サンプル名" },
+  { key: "measuring points",           label: "測定点数" },
+  { key: "max magnetic field",         label: "最大磁場 (Oe)" },
+  { key: "lock-in amp. sensitivity",   label: "LIA 感度" },
+  { key: "lock-in amp. time constant", label: "LIA 時定数 (ms)" },
+  { key: "lock-in amp. phase",         label: "LIA 位相 (°)" },
+  { key: "calibration value",          label: "校正定数" },
+  { key: "measuring time",             label: "測定時間 (min)" },
+  { key: "pole piece gap",             label: "ポール間隔 (mm)" },
+  { key: "magnet angle",               label: "磁場角度 (°)" },
+];
+
+const CORRECTION_KEYS = [
+  "correction(demagnetization field)",
+  "correction(diamagnetism)",
+  "correction(subtraction)",
+  "correction(addition)",
+  "correction(spline)",
+  "correction(smoothing)",
+  "correction(image effect)",
+] as const;
+
+const CORRECTION_LABELS: Record<string, string> = {
+  "correction(demagnetization field)": "反磁場補正",
+  "correction(diamagnetism)":          "反磁性補正",
+  "correction(subtraction)":           "差し引き補正",
+  "correction(addition)":              "加算補正",
+  "correction(spline)":                "スプライン補正",
+  "correction(smoothing)":             "スムージング",
+  "correction(image effect)":          "イメージ効果補正",
+};
+
 // ── ログタブ ──────────────────────────
 function LogTab({ entries }: { entries: FileEntry[] }) {
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const loaded = entries.filter((e) => e.result);
+  const [logFilter,     setLogFilter]     = useState("");
 
-  if (loaded.length === 0) {
+  if (entries.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <p className="text-xs text-zinc-600">ファイルを読み込むとログが表示されます</p>
@@ -946,46 +1058,201 @@ function LogTab({ entries }: { entries: FileEntry[] }) {
     );
   }
 
-  const idx    = Math.min(selectedIndex, entries.length - 1);
+  const idx    = Math.min(selectedIndex, Math.max(0, entries.length - 1));
   const target = entries[idx] ?? entries[0];
+  const result = target?.result;
+  const logs   = result?.logs ?? [];
+
+
+  // ── ログ行の色分け ──
+  const logLineClass = (line: string): string => {
+    if (/^---/.test(line))                                        return "text-zinc-200 font-semibold";
+    if (/警告|warn/i.test(line))                                  return "text-amber-400";
+    if (/エラー|error/i.test(line))                               return "text-red-400";
+    if (/R²/.test(line) || /[Mm]s=|[Mm]r=|[Hh]c=|[Hh]s=/.test(line)) return "text-cyan-300";
+    if (/補正|correction/i.test(line))                            return "text-emerald-300";
+    return "text-zinc-400";
+  };
+
+  // ── ログからR²抽出 / slopeはAPIフィールドを直接使用 ──
+  const logText = logs.join("\n");
+  const r2Match = logText.match(/R²=\[正\s*([\d.]+),\s*負\s*([\d.]+)\]/);
+  const r2Pos   = r2Match ? parseFloat(r2Match[1]) : null;
+  const r2Neg   = r2Match ? parseFloat(r2Match[2]) : null;
+  const slope   = result?.demag_slope ?? null;
+
+  const r2Color = (v: number | null) =>
+    v === null ? "text-zinc-500" : v >= 0.9995 ? "text-emerald-400" : v >= 0.999 ? "text-yellow-400" : "text-red-400";
+
+  // ── フィルター済みリスト ──
+  const filteredLogs = logFilter
+    ? logs.filter((l) => l.toLowerCase().includes(logFilter.toLowerCase()))
+    : logs;
+  const meta = result?.metadata ?? {};
+
+  // 表示すべき重要フィールド（0・空・デフォルト値を除外）
+  const displayMeta = META_DISPLAY
+    .map(({ key, label }) => ({ label, value: meta[key] }))
+    .filter(({ value }) => value != null && value !== "0" && value !== "");
+
+  // 補正フラグのサマリ
+  const activeCorrections = CORRECTION_KEYS
+    .filter((k) => meta[k]?.toUpperCase() === "YES")
+    .map((k) => CORRECTION_LABELS[k]);
+  const correctionPresent = CORRECTION_KEYS.some((k) => k in meta);
+
+  const copyLog  = () => navigator.clipboard.writeText(logs.join("\n"));
+  const copyMeta = () =>
+    navigator.clipboard.writeText(displayMeta.map(({ label, value }) => `${label}: ${value}`).join("\n"));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="p-3 border-b border-zinc-800 shrink-0">
-        <select value={idx}
-          onChange={(e) => setSelectedIndex(Number(e.target.value))}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1.5">
+      {/* ファイル選択 */}
+      <div className="px-3 pt-3 pb-2 border-b border-zinc-800 shrink-0">
+        <select value={idx} onChange={(e) => setSelectedIndex(Number(e.target.value))}
+          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500">
           {entries.map((e, i) => (
             <option key={i} value={i}>{e.legendName || e.file.name}</option>
           ))}
         </select>
+        {target.error && (
+          <p className="mt-1.5 text-[10px] text-red-400 bg-red-900/20 rounded px-2 py-1">{target.error}</p>
+        )}
       </div>
 
-      {target.result?.metadata && Object.keys(target.result.metadata).length > 0 && (
-        <div className="p-3 border-b border-zinc-800 shrink-0">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">測定情報</p>
-          <dl className="space-y-0.5">
-            {Object.entries(target.result.metadata).slice(0, 12).map(([k, v]) => (
-              <div key={k} className="flex gap-2 text-xs">
-                <dt className="text-zinc-500 shrink-0 w-24 truncate" title={k}>{k}</dt>
-                <dd className="text-zinc-300 truncate" title={v}>{v}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto min-h-0">
 
-      <div className="flex-1 overflow-y-auto p-3">
-        <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">解析ログ</p>
-        {target.result?.logs && target.result.logs.length > 0 ? (
-          <pre className="text-xs text-zinc-400 font-mono leading-relaxed whitespace-pre-wrap">
-            {target.result.logs.join("\n")}
-          </pre>
-        ) : target.error ? (
-          <p className="text-xs text-red-400">{target.error}</p>
-        ) : (
-          <p className="text-xs text-zinc-600">ログなし</p>
+        {/* ── 解析値カード ── */}
+        {result && (
+          <div className="px-3 py-2.5 border-b border-zinc-800">
+            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-2">解析値</p>
+            <div className="grid grid-cols-2 gap-1.5 mb-2">
+              {([
+                { label: "Ms", value: result.Ms?.toFixed(1),                                   unit: "kA/m" },
+                { label: "Mr", value: result.Mr?.toFixed(1),                                   unit: "kA/m" },
+                { label: "Hc", value: result.Hc_Oe != null ? (result.Hc_Oe * 0.1).toFixed(2) : null, unit: "mT" },
+                { label: "Hs", value: result.Hs_Oe != null ? (result.Hs_Oe * 0.1).toFixed(2) : null, unit: "mT" },
+              ]).map(({ label, value, unit }) => (
+                <div key={label} className="bg-zinc-800/60 rounded px-2.5 py-2 border border-zinc-700/40">
+                  <p className="text-[9px] text-zinc-500 font-mono mb-0.5">{label}</p>
+                  <p className="text-[13px] font-mono font-semibold text-zinc-100 leading-none">
+                    {value ?? "—"}
+                    <span className="text-[9px] text-zinc-500 ml-1 font-normal">{unit}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+            {/* 保形性バー */}
+            {result.squareness != null && (
+              <div className="bg-zinc-800/60 rounded px-2.5 py-2 border border-zinc-700/40">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[9px] text-zinc-500 font-mono">保形性 Mr/Ms</p>
+                  <p className="text-[11px] font-mono font-semibold text-zinc-200">{result.squareness.toFixed(3)}</p>
+                </div>
+                <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-indigo-500 transition-all"
+                    style={{ width: `${Math.min(100, result.squareness * 100)}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
         )}
+
+        {/* ── 反磁性補正品質 ── */}
+        {(r2Pos !== null || slope !== null) && (
+          <div className="px-3 py-2.5 border-b border-zinc-800">
+            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-2">反磁性補正品質</p>
+            <div className="space-y-1.5">
+              {slope !== null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-zinc-500">補正傾き</span>
+                  <span className="text-[10px] font-mono text-zinc-300">{slope.toExponential(3)}</span>
+                </div>
+              )}
+              {([
+                { label: "R² (正側)", val: r2Pos },
+                { label: "R² (負側)", val: r2Neg },
+              ]).filter(({ val }) => val !== null).map(({ label, val }) => (
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-[10px] text-zinc-500">{label}</span>
+                  <span className={`text-[10px] font-mono font-semibold ${r2Color(val)}`}>
+                    {val!.toFixed(4)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── 測定情報 ── */}
+        {(displayMeta.length > 0 || correctionPresent) && (
+          <div className="px-3 py-2.5 border-b border-zinc-800">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">測定情報</p>
+              {displayMeta.length > 0 && (
+                <button onClick={copyMeta}
+                  className="text-[9px] text-zinc-600 hover:text-indigo-400 transition-colors px-1.5 py-0.5 rounded hover:bg-indigo-900/20">
+                  コピー
+                </button>
+              )}
+            </div>
+            <dl className="space-y-0">
+              {displayMeta.map(({ label, value }) => (
+                <div key={label} className="flex gap-2 text-[10px] py-0.5 rounded px-1 -mx-1 hover:bg-zinc-800/50 group">
+                  <dt className="text-zinc-500 shrink-0" style={{ width: "8.5rem" }}>{label}</dt>
+                  <dd className="text-zinc-300 break-all min-w-0 group-hover:text-zinc-100 transition-colors">{value}</dd>
+                </div>
+              ))}
+              {/* 装置補正サマリ */}
+              {correctionPresent && (
+                <div className="flex gap-2 text-[10px] py-0.5 rounded px-1 -mx-1 mt-0.5 border-t border-zinc-800/60 pt-1">
+                  <dt className="text-zinc-500 shrink-0" style={{ width: "8.5rem" }}>VSM装置補正</dt>
+                  <dd className={activeCorrections.length > 0 ? "text-amber-300 break-all" : "text-zinc-600"}>
+                    {activeCorrections.length > 0
+                      ? activeCorrections.join(", ")
+                      : "なし（このアプリで処理）"}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
+
+        {/* ── 解析ログ ── */}
+        <div className="px-3 py-2.5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+              解析ログ <span className="text-zinc-700 font-normal">({logs.length}行)</span>
+            </p>
+            {logs.length > 0 && (
+              <button onClick={copyLog}
+                className="text-[9px] text-zinc-600 hover:text-indigo-400 transition-colors px-1.5 py-0.5 rounded hover:bg-indigo-900/20">
+                コピー
+              </button>
+            )}
+          </div>
+          {logs.length > 0 && (
+            <input type="text" value={logFilter} onChange={(e) => setLogFilter(e.target.value)}
+              placeholder="ログを絞り込み..."
+              className="w-full bg-zinc-800/60 border border-zinc-700/40 text-zinc-300 text-[10px] rounded px-2 py-1 mb-2 focus:outline-none focus:border-indigo-500/60 placeholder:text-zinc-700"
+            />
+          )}
+          {filteredLogs.length > 0 ? (
+            <div className="space-y-0.5 font-mono text-[10px] leading-relaxed">
+              {filteredLogs.map((line, i) => (
+                <p key={i} className={`${logLineClass(line)} whitespace-pre-wrap break-all`}>{line}</p>
+              ))}
+              {logFilter && filteredLogs.length === 0 && (
+                <p className="text-zinc-600">「{logFilter}」に一致しません</p>
+              )}
+            </div>
+          ) : !logFilter && target.error ? (
+            <p className="text-[10px] text-red-400">{target.error}</p>
+          ) : !logFilter ? (
+            <p className="text-[10px] text-zinc-600">ログなし</p>
+          ) : null}
+        </div>
+
       </div>
     </div>
   );
@@ -998,15 +1265,47 @@ export default function Sidebar({
   onLoadFiles, onAddFiles, onClearAll,
   onParamsChange, onUnitModeChange, onGraphSettingsChange,
   onEntryDisplayChange, onEntryCalcChange, onEntryRemove, onEntryMove,
-  onApplyFirstToAll, onSaveSession, onLoadSession, onSaveGraph, onCopyGraph,
+  onApplyFirstToAll, onSaveSession, onLoadSession,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("analysis");
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: "analysis", label: "解析" },
-    { id: "graph",    label: "グラフ" },
-    { id: "save",     label: "保存" },
-    { id: "log",      label: "ログ" },
+  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    {
+      id: "analysis", label: "解析",
+      icon: (
+        <svg viewBox="0 0 14 10" width="13" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
+          <polyline points="0,5 2,5 3,1 4.5,9 6,3 7.5,7 9,5 14,5" />
+        </svg>
+      ),
+    },
+    {
+      id: "graph", label: "グラフ",
+      icon: (
+        <svg viewBox="0 0 14 12" width="13" height="11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
+          <polyline points="1,10 5,5 9,7 13,2" />
+          <line x1="1" y1="11.5" x2="13" y2="11.5" strokeOpacity="0.5" />
+        </svg>
+      ),
+    },
+    {
+      id: "save", label: "保存",
+      icon: (
+        <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
+          <path d="M7 1v8M4 6l3 3 3-3" />
+          <path d="M1 11v2h12v-2" />
+        </svg>
+      ),
+    },
+    {
+      id: "log", label: "ログ",
+      icon: (
+        <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round">
+          <rect x="2" y="1" width="10" height="12" rx="1" />
+          <line x1="5" y1="5" x2="9" y2="5" />
+          <line x1="5" y1="8" x2="9" y2="8" />
+        </svg>
+      ),
+    },
   ];
 
   return (
@@ -1015,11 +1314,12 @@ export default function Sidebar({
       <div className="flex border-b border-zinc-800 shrink-0">
         {TABS.map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+            className={`flex-1 py-2 text-[10px] font-medium transition-colors flex flex-col items-center gap-0.5 ${
               activeTab === tab.id
                 ? "text-indigo-400 border-b-2 border-indigo-500"
                 : "text-zinc-500 hover:text-zinc-300 border-b-2 border-transparent"
             }`}>
+            {tab.icon}
             {tab.label}
           </button>
         ))}
@@ -1041,10 +1341,7 @@ export default function Sidebar({
         <GraphTab graphSettings={graphSettings} onChange={onGraphSettingsChange} />
       )}
       {activeTab === "save" && (
-        <SaveTab
-          onSave={onSaveSession} onLoad={onLoadSession} hasEntries={entries.length > 0}
-          onSaveGraph={onSaveGraph} onCopyGraph={onCopyGraph}
-        />
+        <SaveTab onSave={onSaveSession} onLoad={onLoadSession} hasEntries={entries.length > 0} />
       )}
       {activeTab === "log"  && <LogTab entries={entries} />}
     </aside>

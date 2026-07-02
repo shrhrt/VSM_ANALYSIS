@@ -1,12 +1,9 @@
-export type Rarity = "normal" | "rare" | "sr" | "ssr" | "sssr";
+export type Rarity = "normal" | "sssr";
 
 // 演出の確率（テキストとは独立。どの文章でも一定確率で発動）
 const TIER_WEIGHTS: Record<Rarity, number> = {
-  normal: 100,
-  rare:    20,
-  sr:       4,
-  ssr:    0.8,
-  sssr:  0.16,
+  normal: 99,
+  sssr:    1,
 };
 
 export function rollRarity(): Rarity {

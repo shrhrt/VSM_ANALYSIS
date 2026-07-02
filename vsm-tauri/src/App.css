@@ -1,212 +1,103 @@
 @import "tailwindcss";
 
-/* ── レアリティエフェクト用アニメーション ──────────────────── */
+/* ══════════════════════════════════════════════════
+   超超激レア演出 (1%) — SSSR エフェクト
+   ══════════════════════════════════════════════════ */
 
-/* レア: アンバーフラッシュ */
-@keyframes vsm-rare-flash {
-  0%   { opacity: 0; }
-  15%  { opacity: 0.45; }
-  60%  { opacity: 0.25; }
-  100% { opacity: 0; }
+/* 画面シェイク（強） */
+@keyframes vsm-sssr-shake {
+  0%,100% { transform: none; }
+  4%  { transform: translateX(-10px) translateY( 5px) rotate(-1.2deg); }
+  8%  { transform: translateX( 10px) translateY(-5px) rotate( 0.8deg); }
+  12% { transform: translateX( -8px) translateY( 3px) rotate(-0.6deg); }
+  16% { transform: translateX(  8px) translateY(-3px) rotate( 0.4deg); }
+  22% { transform: translateX( -5px); }
+  28% { transform: translateX(  5px); }
+  36% { transform: translateX( -3px); }
+  46% { transform: translateX(  2px); }
+  60% { transform: translateX( -1px); }
+  80% { transform: none; }
 }
+.vsm-sssr-shake { animation: vsm-sssr-shake 1.8s ease-in-out forwards; }
 
-/* 激レア: 暗転 + 紫フラッシュ */
-@keyframes vsm-sr-dim {
-  0%   { opacity: 0; }
-  10%  { opacity: 0.65; }
-  75%  { opacity: 0.65; }
-  100% { opacity: 0; }
-}
-@keyframes vsm-sr-flash {
-  0%   { opacity: 0; }
-  20%  { opacity: 0.9; }
+/* 白フラッシュ（最初の一瞬） */
+@keyframes vsm-sssr-initial-flash {
+  0%   { opacity: 1; }
+  18%  { opacity: 0.7; }
   35%  { opacity: 0; }
-  55%  { opacity: 0.6; }
-  70%  { opacity: 0; }
   100% { opacity: 0; }
 }
-@keyframes vsm-sr-text {
-  0%   { opacity: 0; transform: translateY(12px) scale(0.95); }
-  20%  { opacity: 1; transform: translateY(0)    scale(1); }
-  75%  { opacity: 1; transform: translateY(0)    scale(1); }
-  100% { opacity: 0; transform: translateY(-8px) scale(1.02); }
-}
+.vsm-sssr-initial-flash { animation: vsm-sssr-initial-flash 0.55s ease-out forwards; }
 
-/* 超激レア: 稲妻フラッシュ */
-@keyframes vsm-ssr-dim {
-  0%   { opacity: 0; }
-  8%   { opacity: 0.85; }
-  80%  { opacity: 0.85; }
-  100% { opacity: 0; }
-}
-@keyframes vsm-ssr-lightning {
-  0%   { opacity: 0; }
-  5%   { opacity: 1; }
-  10%  { opacity: 0; }
-  20%  { opacity: 1; }
-  25%  { opacity: 0; }
-  40%  { opacity: 0.7; }
-  45%  { opacity: 0; }
-  100% { opacity: 0; }
-}
-@keyframes vsm-ssr-text {
-  0%   { opacity: 0; transform: scale(0.85); filter: blur(8px); }
-  15%  { opacity: 1; transform: scale(1);    filter: blur(0); }
-  75%  { opacity: 1; transform: scale(1);    filter: blur(0); }
-  100% { opacity: 0; transform: scale(1.05); filter: blur(4px); }
-}
-@keyframes vsm-shake {
-  0%,100% { transform: translateX(0); }
-  10% { transform: translateX(-6px) rotate(-0.5deg); }
-  20% { transform: translateX( 6px) rotate( 0.5deg); }
-  30% { transform: translateX(-4px); }
-  40% { transform: translateX( 4px); }
-  50% { transform: translateX(-2px); }
-  60% { transform: translateX( 2px); }
-  80% { transform: translateX(-1px); }
-}
-
-/* 超超激レア: 暗転 → スポットライト → 虹テキスト */
+/* 暗転背景 */
 @keyframes vsm-sssr-blackout {
   0%   { opacity: 0; }
-  5%   { opacity: 1; }
-  85%  { opacity: 1; }
+  6%   { opacity: 1; }
+  86%  { opacity: 1; }
   100% { opacity: 0; }
 }
-@keyframes vsm-sssr-spotlight {
-  0%   { opacity: 0;   transform: scale(0.3); }
-  15%  { opacity: 1;   transform: scale(1); }
-  80%  { opacity: 1;   transform: scale(1); }
-  100% { opacity: 0;   transform: scale(1.08); }
-}
-@keyframes vsm-sssr-scanline {
-  0%   { background-position: 0 0; }
-  100% { background-position: 0 120px; }
-}
-@keyframes vsm-rainbow-text {
-  0%   { color: #ff4d4d; text-shadow: 0 0 20px #ff4d4d; }
-  16%  { color: #ff9900; text-shadow: 0 0 20px #ff9900; }
-  32%  { color: #ffe600; text-shadow: 0 0 20px #ffe600; }
-  48%  { color: #39ff14; text-shadow: 0 0 20px #39ff14; }
-  64%  { color: #00cfff; text-shadow: 0 0 20px #00cfff; }
-  80%  { color: #bf00ff; text-shadow: 0 0 20px #bf00ff; }
-  100% { color: #ff4d4d; text-shadow: 0 0 20px #ff4d4d; }
-}
-@keyframes vsm-glow-pulse {
-  0%,100% { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; }
-  50%      { text-shadow: 0 0 25px currentColor, 0 0 50px currentColor, 0 0 80px currentColor; }
-}
-@keyframes vsm-badge-pop {
-  0%   { transform: scale(0); opacity: 0; }
-  50%  { transform: scale(1.15); }
-  70%  { transform: scale(0.95); }
-  100% { transform: scale(1); opacity: 1; }
-}
+.vsm-sssr-blackout { animation: vsm-sssr-blackout 8s ease-out forwards; }
 
-.vsm-rare-flash {
-  animation: vsm-rare-flash 1.5s ease-out forwards;
-}
-.vsm-sr-dim    { animation: vsm-sr-dim   2.5s ease-out forwards; }
-.vsm-sr-flash  { animation: vsm-sr-flash 1.5s ease-out forwards; }
-.vsm-sr-text   { animation: vsm-sr-text  2.5s ease-out forwards; }
-.vsm-ssr-dim   { animation: vsm-ssr-dim  4s ease-out forwards; }
-.vsm-ssr-lightning { animation: vsm-ssr-lightning 1.5s ease-out forwards; }
-.vsm-ssr-text  { animation: vsm-ssr-text 4s ease-out forwards; }
-.vsm-shake     { animation: vsm-shake 0.5s ease-in-out; }
-.vsm-sssr-blackout  { animation: vsm-sssr-blackout 7s ease-out forwards; }
-.vsm-sssr-spotlight { animation: vsm-sssr-spotlight 7s ease-out forwards; }
-.vsm-rainbow-text   { animation: vsm-rainbow-text 1s linear infinite; }
-.vsm-glow-pulse     { animation: vsm-glow-pulse 1.2s ease-in-out infinite; }
-.vsm-badge-pop      { animation: vsm-badge-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-
-/* ── レアリティ追加エフェクト ─────────────────────────────── */
-
-/* RARE: 金色パーティクル上昇 */
-@keyframes vsm-particle-rise {
-  0%   { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
-  60%  { opacity: 0.6; }
-  100% { opacity: 0; transform: translateY(-110px) scale(0.1) rotate(220deg); }
-}
-
-/* SR: 横スキャンライン */
-@keyframes vsm-sr-scan {
-  0%   { top: -4px; opacity: 0; }
-  6%   { opacity: 1; }
-  94%  { opacity: 0.7; }
-  100% { top: 100%; opacity: 0; }
-}
-.vsm-sr-scanbeam {
-  position: absolute; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, transparent, rgba(167,139,250,0.85) 20%, white 50%, rgba(167,139,250,0.85) 80%, transparent);
-  box-shadow: 0 0 18px 5px rgba(167,139,250,0.55);
-  animation: vsm-sr-scan 1.8s 0.3s ease-in-out forwards;
-}
-
-/* SSR: 斜め稲妻ストリーク（clip-pathで描画→消去） */
+/* 稲妻ストリーク */
 @keyframes vsm-streak {
   0%   { clip-path: inset(0 100% 0 0); opacity: 0; }
   8%   { opacity: 1; }
-  38%  { clip-path: inset(0 0% 0 0); opacity: 1; }
-  65%  { clip-path: inset(0 0% 0 60%); opacity: 0.5; }
+  40%  { clip-path: inset(0 0% 0 0); opacity: 1; }
+  68%  { clip-path: inset(0 0% 0 55%); opacity: 0.6; }
   100% { clip-path: inset(0 0% 0 100%); opacity: 0; }
 }
 
-/* SSSR: リング拡張 */
-@keyframes vsm-ring-expand {
-  0%   { transform: scale(0); opacity: 1; }
-  100% { transform: scale(14); opacity: 0; }
+/* リング拡張（より広く・速く） */
+@keyframes vsm-sssr-ring-expand {
+  0%   { transform: scale(0);  opacity: 1; }
+  60%  { opacity: 0.7; }
+  100% { transform: scale(20); opacity: 0; }
 }
 
-/* SSSR: 中央スターバースト */
-@keyframes vsm-sssr-star {
-  0%   { transform: scale(0) rotate(0deg);   opacity: 0; }
-  15%  { transform: scale(1.6) rotate(90deg); opacity: 1; }
-  55%  { transform: scale(1)   rotate(360deg);opacity: 1; }
-  85%  { transform: scale(1.3) rotate(580deg);opacity: 0.7; }
-  100% { transform: scale(0.2) rotate(720deg);opacity: 0; }
-}
-
-/* SSSR: コニックビーム回転 */
+/* コニックビーム回転 */
 @keyframes vsm-sssr-beams {
   from { transform: rotate(0deg);   opacity: 0; }
-  8%   { opacity: 0.7; }
-  85%  { opacity: 0.5; }
-  to   { transform: rotate(180deg); opacity: 0; }
+  8%   { opacity: 0.85; }
+  80%  { opacity: 0.6; }
+  to   { transform: rotate(210deg); opacity: 0; }
 }
 
-/* ── ガチャボタン ─────────────────────────────────────────── */
-@keyframes vsm-gacha-idle {
-  0%,100% { box-shadow: 0 0 5px rgba(239,68,68,0.35), inset 0 1px 0 rgba(255,255,255,0.15); }
-  50%      { box-shadow: 0 0 10px rgba(239,68,68,0.65), 0 0 20px rgba(239,68,68,0.25), inset 0 1px 0 rgba(255,255,255,0.2); }
-}
-@keyframes vsm-gacha-spin {
-  0%   { transform: rotate(0deg) scale(1); }
-  40%  { transform: rotate(200deg) scale(0.85); }
-  70%  { transform: rotate(340deg) scale(1.1); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-@keyframes vsm-gacha-flash {
-  0%,100% { opacity: 0; }
-  30%      { opacity: 0.5; }
-  60%      { opacity: 0; }
+/* 中央スターバースト */
+@keyframes vsm-sssr-star {
+  0%   { transform: translate(-50%,-50%) scale(0) rotate(0deg);    opacity: 0; }
+  12%  { transform: translate(-50%,-50%) scale(2)   rotate(80deg);  opacity: 1; }
+  30%  { transform: translate(-50%,-50%) scale(1.2) rotate(200deg); opacity: 1; }
+  60%  { transform: translate(-50%,-50%) scale(1.4) rotate(420deg); opacity: 1; }
+  85%  { transform: translate(-50%,-50%) scale(1.6) rotate(620deg); opacity: 0.8; }
+  100% { transform: translate(-50%,-50%) scale(0.3) rotate(720deg); opacity: 0; }
 }
 
-.vsm-gacha-btn {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(150deg, #f87171 0%, #dc2626 55%, #7f1d1d 100%);
-  border: 1px solid rgba(239,68,68,0.5);
-  animation: vsm-gacha-idle 2.5s ease-in-out infinite;
-  transition: transform 0.1s, filter 0.15s;
+/* バッジテキスト「超超激レア！！！」 */
+@keyframes vsm-sssr-badge {
+  0%   { transform: translate(-50%,-50%) translateY(-20px) scale(0); opacity: 0; }
+  18%  { transform: translate(-50%,-50%) translateY(-8px)  scale(1.18); opacity: 1; }
+  26%  { transform: translate(-50%,-50%) translateY(0)     scale(0.96); opacity: 1; }
+  35%  { transform: translate(-50%,-50%) translateY(0)     scale(1); opacity: 1; }
+  82%  { transform: translate(-50%,-50%) translateY(0)     scale(1); opacity: 1; }
+  100% { transform: translate(-50%,-50%) translateY(-15px) scale(0.8); opacity: 0; }
 }
-.vsm-gacha-btn::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
-  pointer-events: none;
+
+/* 四隅グロー */
+@keyframes vsm-sssr-corner-glow {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  75%  { opacity: 0.8; }
+  100% { opacity: 0; }
 }
-.vsm-gacha-btn:hover  { filter: brightness(1.18); }
-.vsm-gacha-btn:active { transform: scale(0.91); filter: brightness(0.9); }
-.vsm-gacha-rolling { animation: vsm-gacha-spin 0.38s cubic-bezier(0.22,1.2,0.6,1) forwards !important; }
-.vsm-gacha-flash   { animation: vsm-gacha-flash 0.38s ease-out forwards; }
+
+/* 虹テキスト */
+@keyframes vsm-rainbow-text {
+  0%   { color: #ff4d4d; text-shadow: 0 0 24px #ff4d4d, 0 0 48px #ff4d4d88; }
+  16%  { color: #ff9900; text-shadow: 0 0 24px #ff9900, 0 0 48px #ff990088; }
+  32%  { color: #ffe600; text-shadow: 0 0 24px #ffe600, 0 0 48px #ffe60088; }
+  48%  { color: #39ff14; text-shadow: 0 0 24px #39ff14, 0 0 48px #39ff1488; }
+  64%  { color: #00cfff; text-shadow: 0 0 24px #00cfff, 0 0 48px #00cfff88; }
+  80%  { color: #bf00ff; text-shadow: 0 0 24px #bf00ff, 0 0 48px #bf00ff88; }
+  100% { color: #ff4d4d; text-shadow: 0 0 24px #ff4d4d, 0 0 48px #ff4d4d88; }
+}
+.vsm-rainbow-text { animation: vsm-rainbow-text 0.9s linear infinite; }

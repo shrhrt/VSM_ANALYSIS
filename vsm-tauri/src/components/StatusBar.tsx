@@ -1,43 +1,46 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { FileEntry } from "../App";
-import { pickText, rollRarity, type Rarity } from "../data/trivia";
+import { pickText, rollRarity } from "../data/trivia";
 
 interface Props {
   entries:       FileEntry[];
   backendStatus: "starting" | "ready" | "error";
 }
 
-// ── バーチャートビジュアライザー ──────────────────────────────
-const BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
-const VIZ_COLS = 16;
+// ── ファイルカラードット ──────────────────────────────────────
+const MAX_DOTS = 8;
 
-function WaveVisualizer() {
-  const [bars, setBars] = useState<number[]>(() => Array(VIZ_COLS).fill(0));
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      setBars(prev => prev.map(h => {
-        // 一定確率でランダムな高さにポップアップ
-        if (Math.random() < 0.09) return 3 + Math.floor(Math.random() * 5);
-        // それ以外は1ずつ減衰
-        return Math.max(0, h - 1);
-      }));
-    }, 75);
-    return () => clearInterval(t);
-  }, []);
+function FileColorDots({ entries }: { entries: FileEntry[] }) {
+  const visible = entries.slice(0, MAX_DOTS);
+  const overflow = entries.length - MAX_DOTS;
 
   return (
-    <span
-      className="shrink-0 inline-block font-mono text-[11px] leading-none select-none"
-      style={{
-        color: "#34d399",
-        textShadow: "0 0 5px rgba(52,211,153,0.5)",
-        width: 96,
-        letterSpacing: "0.02em",
-        overflow: "hidden",
-      }}
-    >
-      {bars.map((b, i) => <span key={i}>{BLOCKS[b]}</span>)}
+    <span className="shrink-0 flex items-center gap-1.5" style={{ width: 96 }}>
+      {visible.length === 0
+        ? Array(MAX_DOTS).fill(0).map((_, i) => (
+            <span key={i} className="w-2 h-2 rounded-sm bg-zinc-800 border border-zinc-700/40 shrink-0" />
+          ))
+        : <>
+            {visible.map((e, i) => (
+              <span
+                key={i}
+                className="shrink-0 w-2.5 h-2.5 rounded-sm"
+                title={e.file?.name ?? ""}
+                style={{
+                  background:  e.error   ? "#52525b" : e.color,
+                  opacity:     e.loading ? 0.35       : e.error ? 0.4 : 1,
+                  boxShadow:   !e.error && !e.loading && e.result
+                    ? `0 0 5px ${e.color}99` : undefined,
+                }}
+              />
+            ))}
+            {overflow > 0 && (
+              <span className="text-[9px] text-zinc-600 font-mono leading-none shrink-0">
+                +{overflow}
+              </span>
+            )}
+          </>
+      }
     </span>
   );
 }
@@ -46,165 +49,115 @@ function Pipe() {
   return <span className="text-indigo-900/80 mx-2 text-xs">│</span>;
 }
 
-// ── レアリティ設定 ────────────────────────────────────────────
-const RARITY_CONFIG: Record<Rarity, {
-  label:      string;
-  textClass:  string;
-  badgeClass: string;
-  iconClass:  string;
-}> = {
-  normal: { label: "",         textClass: "text-zinc-500",   badgeClass: "", iconClass: "text-indigo-600" },
-  rare:   { label: "RARE",     textClass: "text-amber-300",  badgeClass: "text-amber-400 border-amber-600/50 bg-amber-950/60", iconClass: "text-amber-500" },
-  sr:     { label: "激レア",   textClass: "text-violet-300", badgeClass: "text-violet-300 border-violet-500/50 bg-violet-950/60", iconClass: "text-violet-400" },
-  ssr:    { label: "超激レア", textClass: "text-orange-300", badgeClass: "text-orange-300 border-orange-500/50 bg-orange-950/60", iconClass: "text-orange-400" },
-  sssr:   { label: "超超激レア", textClass: "vsm-rainbow-text", badgeClass: "border-yellow-400/50 bg-black", iconClass: "text-yellow-300" },
-};
-
-// ── エフェクトオーバーレイ（テキストなし・ビジュアルのみ）──────
-function RarityOverlay({ rarity, onDone }: { rarity: Rarity | null; onDone: () => void }) {
-  if (!rarity || rarity === "normal") return null;
-
-  const DURATIONS: Record<Exclude<Rarity, "normal">, number> = {
-    rare: 1500, sr: 2500, ssr: 4000, sssr: 7000,
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+// ── 超超激レア演出オーバーレイ ─────────────────────────────
+function SssrOverlay({ onDone }: { onDone: () => void }) {
   useEffect(() => {
-    const t = setTimeout(onDone, DURATIONS[rarity as keyof typeof DURATIONS]);
+    const t = setTimeout(onDone, 8000);
     return () => clearTimeout(t);
-  }, [rarity]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (rarity === "rare") {
-    return (
-      <div className="fixed inset-0 pointer-events-none z-40">
-        <div className="vsm-rare-flash absolute bottom-0 left-0 right-0 h-40"
-          style={{ background: "radial-gradient(ellipse at 50% 100%, rgba(251,191,36,0.55) 0%, transparent 65%)" }} />
-        {[8, 22, 37, 53, 68, 82].map((left, i) => (
-          <span key={i} style={{
-            position: "absolute", bottom: 28, left: `${left}%`,
-            color: `rgba(251,${170 + i * 10},36,0.95)`,
-            fontSize: 11 + (i % 3),
-            animation: `vsm-particle-rise 1s ${i * 0.09}s ease-out forwards`,
-          }}>✦</span>
-        ))}
-      </div>
-    );
-  }
-
-  if (rarity === "sr") {
-    return (
-      <div className="fixed inset-0 pointer-events-none z-40">
-        <div className="vsm-sr-dim absolute inset-0 bg-indigo-950/65" />
-        <div className="vsm-sr-flash absolute inset-0"
-          style={{ background: "radial-gradient(ellipse at 50% 100%, rgba(167,139,250,0.6) 0%, transparent 55%)" }} />
-        <div className="vsm-sr-scanbeam" />
-        <div className="vsm-sr-dim absolute inset-0" style={{
-          background: "radial-gradient(ellipse 90% 80% at 50% 50%, transparent 40%, rgba(88,28,135,0.5) 100%)",
-          animationDuration: "2.5s",
-        }} />
-      </div>
-    );
-  }
-
-  if (rarity === "ssr") {
-    const streaks = [
-      { top: "18%", rotate: "-14deg", delay: "0.2s", r: "255", g: "150", b: "50" },
-      { top: "55%", rotate:  "10deg", delay: "0.5s", r: "255", g: "100", b: "30" },
-      { top: "35%", rotate:  "-4deg", delay: "0.8s", r: "255", g: "200", b: "80" },
-    ];
-    return (
-      <div className="fixed inset-0 pointer-events-none z-40 vsm-shake">
-        <div className="vsm-ssr-dim absolute inset-0 bg-zinc-950/88"
-          style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,100,0,0.03) 2px, rgba(255,100,0,0.03) 4px)" }} />
-        <div className="vsm-ssr-lightning absolute inset-0"
-          style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(255,150,50,0.75) 0%, transparent 50%)" }} />
-        {streaks.map((s, i) => (
-          <div key={i} style={{
-            position: "absolute", top: s.top, left: 0, right: 0,
-            height: i === 2 ? 1 : 2,
-            background: `linear-gradient(90deg, transparent 0%, rgba(${s.r},${s.g},${s.b},0.9) 25%, white 50%, rgba(${s.r},${s.g},${s.b},0.9) 75%, transparent 100%)`,
-            boxShadow: `0 0 12px 2px rgba(${s.r},${s.g},${s.b},0.6)`,
-            transform: `rotate(${s.rotate})`,
-            animation: `vsm-streak 1.6s ${s.delay} ease-out forwards`,
-          }} />
-        ))}
-      </div>
-    );
-  }
-
-  if (rarity === "sssr") {
-    const rings = [
-      { color: "200,100,255", delay: "0.2s" },
-      { color: "100,200,255", delay: "0.55s" },
-      { color: "255,200,80",  delay: "0.9s" },
-    ];
-    return (
-      <div className="fixed inset-0 pointer-events-none z-50">
-        <div className="vsm-sssr-blackout absolute inset-0 bg-black"
-          style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.012) 3px, rgba(255,255,255,0.012) 4px)" }} />
-        {/* コニックビーム回転 */}
-        <div style={{
-          position: "absolute", top: "50%", left: "50%",
-          width: 400, height: 400, marginLeft: -200, marginTop: -200,
-          borderRadius: "50%",
-          background: "conic-gradient(rgba(200,100,255,0.35) 0deg, transparent 25deg, rgba(100,200,255,0.35) 60deg, transparent 85deg, rgba(255,200,80,0.35) 120deg, transparent 145deg, rgba(100,255,150,0.35) 180deg, transparent 205deg, rgba(255,100,100,0.35) 240deg, transparent 265deg, rgba(180,100,255,0.35) 300deg, transparent 325deg)",
-          animation: "vsm-sssr-beams 7s ease-out forwards",
-        }} />
-        {/* 拡張リング */}
-        {rings.map((r, i) => (
-          <div key={i} style={{
-            position: "absolute", top: "50%", left: "50%",
-            width: 100, height: 100, marginLeft: -50, marginTop: -50,
-            borderRadius: "50%",
-            border: `${2 - i * 0.4}px solid rgba(${r.color},0.9)`,
-            boxShadow: `0 0 20px rgba(${r.color},0.5)`,
-            animation: `vsm-ring-expand 2.8s ${r.delay} ease-out forwards`,
-          }} />
-        ))}
-        {/* 中央スター */}
-        <div style={{
-          position: "absolute", top: "50%", left: "50%",
-          transform: "translate(-50%,-50%)",
-          fontSize: 64, lineHeight: 1,
-          animation: "vsm-sssr-star 7s ease-in-out forwards",
-        }} className="vsm-rainbow-text">✦</div>
-      </div>
-    );
-  }
-  return null;
-}
-
-// ── ガチャボタン ────────────────────────────────────────────
-function GachaButton({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
-  const [spinning, setSpinning] = useState(false);
-
-  const handleClick = () => {
-    if (disabled || spinning) return;
-    setSpinning(true);
-    onClick();
-    setTimeout(() => setSpinning(false), 400);
-  };
+  const rings = [
+    { color: "200,80,255",  delay: "0.1s" },
+    { color: "80,200,255",  delay: "0.45s" },
+    { color: "255,200,60",  delay: "0.8s" },
+    { color: "255,80,140",  delay: "1.15s" },
+    { color: "80,255,180",  delay: "1.5s" },
+    { color: "255,140,40",  delay: "1.85s" },
+  ];
+  const streaks = [
+    { top: "12%", rotate: "-13deg", delay: "0.25s", color: "200,80,255" },
+    { top: "34%", rotate:  "9deg",  delay: "0.55s", color: "80,200,255" },
+    { top: "58%", rotate: "-6deg",  delay: "0.85s", color: "255,200,60" },
+    { top: "78%", rotate:  "14deg", delay: "1.1s",  color: "255,80,140" },
+  ];
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={spinning}
-      className={`vsm-gacha-btn shrink-0 flex items-center justify-center w-5 h-5 rounded text-[11px] text-red-100 cursor-pointer select-none ${spinning ? "pointer-events-none" : ""}`}
-      title="豆知識をロール"
-    >
-      {spinning && <div className="vsm-gacha-flash absolute inset-0 bg-red-200 pointer-events-none rounded" />}
-      <span className={`leading-none ${spinning ? "vsm-gacha-rolling inline-block" : ""}`}>◈</span>
-    </button>
+    <div className="fixed inset-0 pointer-events-none z-50 vsm-sssr-shake">
+      {/* 白フラッシュ */}
+      <div className="vsm-sssr-initial-flash absolute inset-0 bg-white" />
+
+      {/* 暗転背景 */}
+      <div className="vsm-sssr-blackout absolute inset-0 bg-black"
+        style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.012) 3px, rgba(255,255,255,0.012) 4px)" }} />
+
+      {/* 稲妻ストリーク */}
+      {streaks.map((s, i) => (
+        <div key={i} style={{
+          position: "absolute", top: s.top, left: 0, right: 0,
+          height: 2,
+          background: `linear-gradient(90deg, transparent 0%, rgba(${s.color},0.9) 20%, white 50%, rgba(${s.color},0.9) 80%, transparent 100%)`,
+          boxShadow: `0 0 16px 4px rgba(${s.color},0.7), 0 0 40px rgba(${s.color},0.3)`,
+          transform: `rotate(${s.rotate})`,
+          animation: `vsm-streak 2s ${s.delay} ease-out forwards`,
+        }} />
+      ))}
+
+      {/* コニックビーム（大・中の2枚重ね） */}
+      {[{ size: 600, speed: "8s" }, { size: 400, speed: "6s" }].map(({ size, speed }, i) => (
+        <div key={i} style={{
+          position: "absolute", top: "50%", left: "50%",
+          width: size, height: size, marginLeft: -size / 2, marginTop: -size / 2,
+          borderRadius: "50%",
+          background: "conic-gradient(rgba(200,80,255,0.4) 0deg, transparent 20deg, rgba(80,200,255,0.4) 60deg, transparent 80deg, rgba(255,200,60,0.4) 120deg, transparent 140deg, rgba(255,80,140,0.4) 180deg, transparent 200deg, rgba(80,255,180,0.4) 240deg, transparent 260deg, rgba(255,140,40,0.4) 300deg, transparent 320deg)",
+          animation: `vsm-sssr-beams ${speed} ease-out forwards`,
+          animationDelay: `${i * 0.3}s`,
+        }} />
+      ))}
+
+      {/* 拡張リング */}
+      {rings.map((r, i) => (
+        <div key={i} style={{
+          position: "absolute", top: "50%", left: "50%",
+          width: 80, height: 80, marginLeft: -40, marginTop: -40,
+          borderRadius: "50%",
+          border: `2px solid rgba(${r.color},1)`,
+          boxShadow: `0 0 24px rgba(${r.color},0.7), 0 0 60px rgba(${r.color},0.3)`,
+          animation: `vsm-sssr-ring-expand 2.6s ${r.delay} ease-out forwards`,
+        }} />
+      ))}
+
+      {/* 中央✦スター */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%",
+        fontSize: 88, lineHeight: 1,
+        animation: "vsm-sssr-star 8s ease-in-out forwards",
+      }} className="vsm-rainbow-text">✦</div>
+
+      {/* 超超激レア！ バッジ */}
+      <div style={{
+        position: "absolute", top: "calc(50% + 72px)", left: "50%",
+        fontSize: 22, fontWeight: 900, letterSpacing: "0.2em",
+        fontFamily: "system-ui, sans-serif",
+        animation: "vsm-sssr-badge 8s ease-out forwards",
+        whiteSpace: "nowrap",
+      }} className="vsm-rainbow-text">超超激レア！！！</div>
+
+      {/* 四隅グロー */}
+      {[
+        { top: 0,    left: 0,    transform: "" },
+        { top: 0,    right: 0,   transform: "" },
+        { bottom: 0, left: 0,    transform: "" },
+        { bottom: 0, right: 0,   transform: "" },
+      ].map((pos, i) => (
+        <div key={i} style={{
+          position: "absolute", ...pos,
+          width: 200, height: 200,
+          background: `radial-gradient(ellipse at ${i < 2 ? "top" : "bottom"} ${i % 2 === 0 ? "left" : "right"}, rgba(200,80,255,0.35) 0%, transparent 65%)`,
+          animation: "vsm-sssr-corner-glow 8s ease-out forwards",
+          animationDelay: `${i * 0.15}s`,
+        }} />
+      ))}
+    </div>
   );
 }
 
 // ── 豆知識表示（props なし、親の再レンダリングから完全隔離）────────
 const TriviaDisplay = memo(function TriviaDisplay() {
   const [text,         setText]      = useState(() => pickText());
-  const [rarity,       setRarity]    = useState<Rarity>("normal");
   const [visible,      setVisible]   = useState(true);
-  const [effectRarity, setEffectRarity] = useState<Rarity | null>(null);
-  const [rolling,      setRolling]   = useState(false);
+  const [showSssr,     setShowSssr]  = useState(false);
+  const [textClass,    setTextClass] = useState("text-zinc-500");
 
   const textRef    = useRef(text);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -212,23 +165,17 @@ const TriviaDisplay = memo(function TriviaDisplay() {
 
   useEffect(() => { textRef.current = text; }, [text]);
 
-  // ROLLしたらインターバルをリセット（連続発火を防ぐ）
   const changeFact = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
 
-    setRolling(true);
     setVisible(false);
     setTimeout(() => {
       const nextText   = pickText(textRef.current);
       const nextRarity = rollRarity();
       setText(nextText);
-      setRarity(nextRarity);
+      setTextClass(nextRarity === "sssr" ? "vsm-rainbow-text" : "text-zinc-500");
       setVisible(true);
-      setRolling(false);
-      if (nextRarity !== "normal") {
-        setEffectRarity(nextRarity);
-      }
-      // 変化後に新しい10秒タイマーをセット
+      if (nextRarity === "sssr") setShowSssr(true);
       intervalRef.current = setInterval(() => changeFnRef.current(), 10_000);
     }, 350);
   }, []);
@@ -240,14 +187,11 @@ const TriviaDisplay = memo(function TriviaDisplay() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
-  const cfg = RARITY_CONFIG[rarity];
-
   return (
     <>
-      <RarityOverlay rarity={effectRarity} onDone={() => setEffectRarity(null)} />
-      <GachaButton onClick={changeFact} disabled={rolling} />
-      <span className={`flex items-center flex-1 min-w-0 ml-1.5 transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}>
-        <span className={`text-[10px] font-bold truncate ${cfg.textClass}`}>{text}</span>
+      {showSssr && <SssrOverlay onDone={() => setShowSssr(false)} />}
+      <span className={`flex items-center flex-1 min-w-0 transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}>
+        <span className={`text-[10px] font-bold truncate ${textClass}`}>{text}</span>
       </span>
     </>
   );
@@ -301,12 +245,12 @@ export default function StatusBar({ entries, backendStatus }: Props) {
 
       <Pipe />
 
-      {/* ASCII波形ビジュアライザー */}
-      <WaveVisualizer />
+      {/* ファイルカラードット */}
+      <FileColorDots entries={entries} />
 
       <Pipe />
 
-      {/* 豆知識 — flex-1ラッパーで位置を固定 */}
+      {/* 豆知識 */}
       <div className="flex-1 min-w-0 flex items-center overflow-hidden">
         <TriviaDisplay />
       </div>

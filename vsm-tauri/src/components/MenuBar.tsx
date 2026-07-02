@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { UnitMode, GraphSettings } from "../App";
 import type { FileWithPath } from "../api/client";
 import { openVSMFiles } from "../api/client";
-import type { ExportOptions } from "../utils/graphExport";
+import { copyGraphToClipboard } from "../utils/graphExport";
 import HelpDialog from "./HelpDialog";
+import ExportDialog from "./ExportDialog";
 
 interface Props {
   hasEntries:      boolean;
@@ -16,8 +17,6 @@ interface Props {
   onLoadSession:   () => void;
   onUnitMode:      (m: UnitMode) => void;
   onGraphSettings: (p: Partial<GraphSettings>) => void;
-  onSaveGraph:     (opts: ExportOptions) => Promise<boolean>;
-  onCopyGraph:     (scale: number) => Promise<void>;
 }
 
 // ── ドロップダウンアイテム型 ────────────────────────────────
@@ -101,9 +100,9 @@ export default function MenuBar({
   onOpenFiles, onAddFiles, onClearAll,
   onSaveSession, onLoadSession,
   onUnitMode, onGraphSettings,
-  onSaveGraph, onCopyGraph,
 }: Props) {
-  const [showHelp, setShowHelp] = useState(false);
+  const [showHelp,   setShowHelp]   = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const pickOpen = async () => { const f = await openVSMFiles(true); if (f.length) onOpenFiles(f); };
   const pickAdd  = async () => { const f = await openVSMFiles(true); if (f.length) onAddFiles(f); };
 
@@ -130,12 +129,9 @@ export default function MenuBar({
   ];
 
   const graphMenu: MenuItem[] = [
-    { kind: "act", label: "PNG でダウンロード（×2）",
-      onClick: () => onSaveGraph({ format: "png", scale: 2, useCustomSize: false, width: 0, height: 0 }) },
-    { kind: "act", label: "SVG でダウンロード",
-      onClick: () => onSaveGraph({ format: "svg", scale: 1, useCustomSize: false, width: 0, height: 0 }) },
+    { kind: "act", label: "画像を出力...",               onClick: () => setShowExport(true) },
     { kind: "sep" },
-    { kind: "act", label: "クリップボードにコピー（×2）", onClick: () => onCopyGraph(2) },
+    { kind: "act", label: "クリップボードにコピー（×2）", onClick: () => copyGraphToClipboard(2) },
   ];
 
   const helpMenu: MenuItem[] = [
@@ -144,7 +140,8 @@ export default function MenuBar({
 
   return (
     <>
-      {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
+      {showHelp   && <HelpDialog   onClose={() => setShowHelp(false)} />}
+      {showExport && <ExportDialog onClose={() => setShowExport(false)} />}
       <div className="h-8 shrink-0 bg-zinc-900 border-b border-zinc-800 flex items-center px-2 gap-0.5 select-none">
         <MenuButton label="ファイル" items={fileMenu} />
         <MenuButton label="表示"     items={viewMenu} />

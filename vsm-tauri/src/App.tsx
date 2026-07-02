@@ -13,9 +13,7 @@ import {
   analyzeFile, AnalysisResult, AnalysisParams, FileCalcSettings, FileWithPath,
   openSessionFilePicker, getSessionEnv, resolveSessionPaths, pathToFileWithPath,
 } from "./api/client";
-import { downloadGraphImage, copyGraphToClipboard } from "./utils/graphExport";
 import { computeRelativePath, computeOnedrivePath } from "./utils/sessionPaths";
-import type { ExportOptions } from "./utils/graphExport";
 
 export type FileEntry = {
   file:          File;
@@ -40,7 +38,7 @@ export type GraphSettings = {
   lineWidth:      number;
   markerSize:     number;
   markerSymbol:   string;
-  legendPosition: "top-right" | "top-left" | "bottom-right" | "bottom-left";
+  legendPosition: "top-left" | "top-center" | "top-right" | "mid-left" | "center" | "mid-right" | "bottom-left" | "bottom-center" | "bottom-right";
   legendFontSize: number;
   legendColumns:  number;
   xLabelOverride: string;
@@ -58,9 +56,15 @@ export type GraphSettings = {
   // 目盛り間隔 (空文字 = 自動)
   xDtick: string;
   yDtick: string;
+  // 補助目盛り
+  showMinorTicks: boolean;
+  minorDivisions: number;   // 主目盛り間隔を何等分するか
   // 論文モード
   paperMode:        boolean;
   paperColorScheme: PaperColorScheme;
+  // 軸ラベル余白 (Plotly margin.b / margin.l)
+  marginB: number;
+  marginL: number;
 };
 
 export const FILE_COLORS = [
@@ -102,9 +106,11 @@ const DEFAULT_GRAPH: GraphSettings = {
   xTickFormat: ".1f", yTickFormat: ".0f",
   xMin: "-1.0", xMax: "1.0", yMin: "", yMax: "",
   xDtick: "0.5", yDtick: "",
+  showMinorTicks: true, minorDivisions: 5,
   zeroLineColor: "grey", zeroLineStyle: "dot",
   gridColor: "#CCCCCC", gridStyle: "dot",
   paperMode: true, paperColorScheme: "current",
+  marginB: 70, marginL: 90,
 };
 
 function App() {
@@ -240,15 +246,6 @@ function App() {
       return updated;
     });
   }, [params]);
-
-  // グラフ画像保存・クリップボードコピー
-  const saveGraph = useCallback(async (opts: ExportOptions): Promise<boolean> => {
-    return downloadGraphImage(opts);
-  }, []);
-
-  const copyGraph = useCallback(async (scale: number) => {
-    await copyGraphToClipboard(scale);
-  }, []);
 
   // ── セッション保存 (v2: パス参照方式) ─────────────────────────
   const saveSession = useCallback(async (): Promise<boolean> => {
@@ -408,32 +405,59 @@ function App() {
     await applySessionV2(missingDialog.session, combined);
   }, [missingDialog, applySessionV2]);
 
-  // ── サイドバーリサイズ ──────────────────────────────────────
+  // ── サイドバーリサイズ (横) ────────────────────────────────
   const SIDEBAR_DEFAULT = 288;
   const SIDEBAR_MIN     = 160;
   const SIDEBAR_MAX     = 900;
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
-  const dragging  = useRef(false);
-  const dragStartX = useRef(0);
-  const dragStartW = useRef(0);
+  const hDragging   = useRef(false);
+  const hDragStartX = useRef(0);
+  const hDragStartW = useRef(0);
+
+  // ── 解析結果パネル縦リサイズ ────────────────────────────────
+  const RESULTS_DEFAULT = 140;
+  const RESULTS_MIN     = 44;
+  const RESULTS_MAX     = 400;
+  const [resultsHeight, setResultsHeight] = useState(RESULTS_DEFAULT);
+  const vDragging   = useRef(false);
+  const vDragStartY = useRef(0);
+  const vDragStartH = useRef(0);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (!dragging.current) return;
-      const delta = e.clientX - dragStartX.current;
-      setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, dragStartW.current + delta)));
+      if (hDragging.current) {
+        const delta = e.clientX - hDragStartX.current;
+        setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, hDragStartW.current + delta)));
+      }
+      if (vDragging.current) {
+        const delta = e.clientY - vDragStartY.current;
+        setResultsHeight(Math.min(RESULTS_MAX, Math.max(RESULTS_MIN, vDragStartH.current - delta)));
+      }
     };
-    const onUp = () => { dragging.current = false; document.body.style.cursor = ""; document.body.style.userSelect = ""; };
+    const onUp = () => {
+      hDragging.current = false;
+      vDragging.current = false;
+      document.body.style.cursor     = "";
+      document.body.style.userSelect = "";
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup",   onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
   }, []);
 
-  const handleDragStart = (e: React.MouseEvent) => {
-    dragging.current   = true;
-    dragStartX.current = e.clientX;
-    dragStartW.current = sidebarWidth;
+  const handleHDragStart = (e: React.MouseEvent) => {
+    hDragging.current   = true;
+    hDragStartX.current = e.clientX;
+    hDragStartW.current = sidebarWidth;
     document.body.style.cursor     = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const handleVDragStart = (e: React.MouseEvent) => {
+    vDragging.current   = true;
+    vDragStartY.current = e.clientY;
+    vDragStartH.current = resultsHeight;
+    document.body.style.cursor     = "row-resize";
     document.body.style.userSelect = "none";
   };
 
@@ -460,8 +484,6 @@ function App() {
         onLoadSession={loadSession}
         onUnitMode={setUnitMode}
         onGraphSettings={(s) => setGraphSettings((p) => ({ ...p, ...s }))}
-        onSaveGraph={saveGraph}
-        onCopyGraph={copyGraph}
       />
 
       {/* メインコンテンツ */}
@@ -486,41 +508,39 @@ function App() {
           onApplyFirstToAll={applyFirstToAll}
           onSaveSession={saveSession}
           onLoadSession={loadSession}
-          onSaveGraph={saveGraph}
-          onCopyGraph={copyGraph}
         />
 
-        {/* ドラッグハンドル */}
+        {/* サイドバーリサイズハンドル */}
         <div
-          className="w-1 shrink-0 cursor-col-resize bg-zinc-800 hover:bg-indigo-500/40 active:bg-indigo-500/70 transition-colors"
-          onMouseDown={handleDragStart}
-        />
+          className="group w-2 shrink-0 cursor-col-resize flex items-center justify-center bg-zinc-900 hover:bg-indigo-950/80 transition-colors"
+          onMouseDown={handleHDragStart}
+        >
+          <div className="flex flex-col gap-0.75">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className="w-1 h-1 rounded-full bg-zinc-700 group-hover:bg-indigo-500 transition-colors" />
+            ))}
+          </div>
+        </div>
 
         {/* グラフ・結果エリア */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          <header className="h-10 flex items-center px-4 border-b border-zinc-700 bg-zinc-900 shrink-0">
-            <span className="text-sm font-semibold text-zinc-200">VSM Data Analyzer</span>
-            <div className="ml-auto flex items-center gap-2">
-              {graphSettings.paperMode && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-900/60 text-indigo-300 border border-indigo-700/40">
-                  論文モード
-                </span>
-              )}
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                backendStatus === "ready" ? "bg-green-900 text-green-300" :
-                backendStatus === "error" ? "bg-red-900 text-red-300" :
-                                            "bg-zinc-800 text-zinc-400 animate-pulse"
-              }`}>
-                {backendStatus === "ready" ? "● API 接続中" :
-                 backendStatus === "error" ? "● API エラー" : "● API 起動中..."}
-              </span>
-            </div>
-          </header>
           <Graph entries={entries} unitMode={unitMode} graphSettings={graphSettings} />
+          {/* 解析結果パネル縦リサイズハンドル */}
+          <div
+            className="group h-2 shrink-0 cursor-row-resize flex items-center justify-center bg-zinc-900 hover:bg-indigo-950/80 transition-colors"
+            onMouseDown={handleVDragStart}
+          >
+            <div className="flex flex-row gap-0.75">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="h-1 w-1 rounded-full bg-zinc-700 group-hover:bg-indigo-500 transition-colors" />
+              ))}
+            </div>
+          </div>
           <ResultsTable
             entries={entries}
             fieldUnit={fieldUnit}
             onToggleUnit={() => setFieldUnit((u) => u === "mT" ? "Oe" : "mT")}
+            maxHeight={resultsHeight}
           />
           <StatusBar entries={entries} backendStatus={backendStatus} />
         </div>

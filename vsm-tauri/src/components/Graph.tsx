@@ -27,10 +27,15 @@ function defaultLabels(mode: UnitMode): { x: string; y: string } {
 }
 
 const LEGEND_POS: Record<string, { x: number; y: number; xanchor: string; yanchor: string }> = {
-  "top-right":    { x: 1, y: 1, xanchor: "right",  yanchor: "top"    },
-  "top-left":     { x: 0, y: 1, xanchor: "left",   yanchor: "top"    },
-  "bottom-right": { x: 1, y: 0, xanchor: "right",  yanchor: "bottom" },
-  "bottom-left":  { x: 0, y: 0, xanchor: "left",   yanchor: "bottom" },
+  "top-left":      { x: 0,   y: 1,   xanchor: "left",   yanchor: "top"    },
+  "top-center":    { x: 0.5, y: 1,   xanchor: "center", yanchor: "top"    },
+  "top-right":     { x: 1,   y: 1,   xanchor: "right",  yanchor: "top"    },
+  "mid-left":      { x: 0,   y: 0.5, xanchor: "left",   yanchor: "middle" },
+  "center":        { x: 0.5, y: 0.5, xanchor: "center", yanchor: "middle" },
+  "mid-right":     { x: 1,   y: 0.5, xanchor: "right",  yanchor: "middle" },
+  "bottom-left":   { x: 0,   y: 0,   xanchor: "left",   yanchor: "bottom" },
+  "bottom-center": { x: 0.5, y: 0,   xanchor: "center", yanchor: "bottom" },
+  "bottom-right":  { x: 1,   y: 0,   xanchor: "right",  yanchor: "bottom" },
 };
 
 const DASH: Record<string, string> = {
@@ -64,9 +69,11 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
     xTickFormat, yTickFormat,
     xMin, xMax, yMin, yMax,
     xDtick, yDtick,
+    showMinorTicks, minorDivisions,
     zeroLineColor, zeroLineStyle,
     gridColor, gridStyle,
     paperMode, paperColorScheme,
+    marginB, marginL,
   } = graphSettings;
 
   const paper = paperMode;
@@ -105,6 +112,23 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
   const dtickX = xDtick ? parseFloat(xDtick) : undefined;
   const dtickY = yDtick ? parseFloat(yDtick) : undefined;
 
+  // 補助目盛り設定（論文モード & showMinorTicks 時のみ）
+  const buildMinor = (mainDtick: number | undefined) => {
+    if (!paper || !showMinorTicks) return {};
+    const n = Math.max(2, minorDivisions);
+    return {
+      minor: {
+        ticks:     "inside",
+        ticklen:   3,
+        tickwidth: 1,
+        tickcolor: "#111111",
+        ...(mainDtick !== undefined && mainDtick > 0
+          ? { dtick: mainDtick / n, tickmode: "linear" as const, tick0: 0 }  // 主間隔をn等分
+          : { nticks: n - 1 }),                                                // 自動モード
+      },
+    };
+  };
+
   const traces = hasData
     ? entries.flatMap((e, idx) => {
         if (!e.result?.plot) return [];
@@ -142,8 +166,8 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
       linecolor:  "#111111",
       linewidth:  1.5,
       showline:   true,
-      mirror:     true,
-      ticks:      "inside",   // 目盛は内側
+      mirror:     "ticks" as const,
+      ticks:      "inside" as const,
       tickcolor:  "#111111",
       ticklen:    6,
       tickwidth:  1.5,
@@ -177,22 +201,26 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
               ...legendAnchor,
             },
             xaxis: {
-              title:      { text: xLabel, font: { size: axisLabelSize, color: theme.fontColor, family: theme.fontFamily } },
-              tickfont:   { size: tickLabelSize, color: theme.fontColor, family: theme.fontFamily },
-              tickformat: xTickFormat || undefined,
+              title:          { text: xLabel, font: { size: Math.max(6, axisLabelSize), color: theme.fontColor, family: theme.fontFamily } },
+              tickfont:       { size: Math.max(6, tickLabelSize), color: theme.fontColor, family: theme.fontFamily },
+              showticklabels: true,
+              tickformat:     xTickFormat || undefined,
               ...(dtickX !== undefined ? { dtick: dtickX, tickmode: "linear" as const, tick0: 0 } : {}),
               ...(xRange ? { range: xRange } : {}),
               ...axisBase,
+              ...buildMinor(dtickX),
             },
             yaxis: {
-              title:      { text: yLabel, font: { size: axisLabelSize, color: theme.fontColor, family: theme.fontFamily } },
-              tickfont:   { size: tickLabelSize, color: theme.fontColor, family: theme.fontFamily },
-              tickformat: yTickFormat || undefined,
+              title:          { text: yLabel, font: { size: Math.max(6, axisLabelSize), color: theme.fontColor, family: theme.fontFamily } },
+              tickfont:       { size: Math.max(6, tickLabelSize), color: theme.fontColor, family: theme.fontFamily },
+              showticklabels: true,
+              tickformat:     yTickFormat || undefined,
               ...(dtickY !== undefined ? { dtick: dtickY, tickmode: "linear" as const, tick0: 0 } : {}),
               ...(yRange ? { range: yRange } : {}),
               ...axisBase,
+              ...buildMinor(dtickY),
             },
-            margin:   { t: 30, r: 40, b: 70, l: 90 },
+            margin:   { t: 30, r: 40, b: marginB, l: marginL },
             autosize: true,
           }}
           useResizeHandler

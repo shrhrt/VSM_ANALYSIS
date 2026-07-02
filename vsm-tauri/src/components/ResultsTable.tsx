@@ -5,6 +5,7 @@ interface Props {
   entries:      FileEntry[];
   fieldUnit:    "mT" | "Oe";
   onToggleUnit: () => void;
+  maxHeight?:   number;
 }
 
 function fmt(v: number | null | undefined, digits: number, scale = 1): string {
@@ -26,7 +27,7 @@ function getSortVal(e: FileEntry, key: SortKey): string | number | null {
   }
 }
 
-export default function ResultsTable({ entries, fieldUnit, onToggleUnit }: Props) {
+export default function ResultsTable({ entries, fieldUnit, onToggleUnit, maxHeight }: Props) {
   const [sortKey,   setSortKey]   = useState<SortKey | null>(null);
   const [sortDir,   setSortDir]   = useState<SortDir>("asc");
   const [collapsed, setCollapsed] = useState(false);
@@ -115,7 +116,7 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit }: Props
 
   return (
     <div className="bg-zinc-900 border-t border-zinc-800 flex flex-col shrink-0"
-      style={collapsed ? {} : { maxHeight: 140 }}>
+      style={collapsed ? {} : { maxHeight: maxHeight ?? 140 }}>
       {/* ヘッダー行 */}
       <div className="flex items-center gap-1.5 px-3 py-1 border-b border-zinc-800 shrink-0">
         {/* 最小化トグル */}
