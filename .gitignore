@@ -53,6 +53,9 @@ venv/
 .vscode/
 .idea/
 
+# VS Code Counter (拡張が生成する行数カウントのレポート。追跡不要)
+.VSCodeCounter/
+
 # OS-generated files
 .DS_Store
 Thumbs.db
