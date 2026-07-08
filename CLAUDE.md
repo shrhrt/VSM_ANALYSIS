@@ -71,9 +71,9 @@ tools/dat_to_VSM.py  # PPMS (.dat) → VSM 形式 変換ツール
 ### データフロー
 
 React (Tauri WebView) → `api/client.ts` が HTTP fetch → FastAPI (:8000) →
-`analysis/calculations.py` で計算 → JSON を返す → React が SVG でグラフ描画。
+`analysis/calculations.py` で計算 → JSON を返す → React が Plotly.js でグラフ描画。
 
-グラフ描画は **フロントエンド (SVG) が担当**。バックエンドは matplotlib を使わない
+グラフ描画は **フロントエンド (Plotly.js / react-plotly.js) が担当**。バックエンドは matplotlib を使わない
 (`build.py` でも `--exclude-module matplotlib` で明示的に除外している)。
 
 ### 中心データ構造: 解析結果 (`AnalysisResult`)
