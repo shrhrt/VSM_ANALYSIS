@@ -5,6 +5,7 @@ import { pickText, rollRarity } from "../data/trivia";
 interface Props {
   entries:       FileEntry[];
   backendStatus: "starting" | "ready" | "error";
+  diagLog?:      string[];
 }
 
 // ── ファイルカラードット ──────────────────────────────────────
@@ -152,6 +153,11 @@ function SssrOverlay({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ── ガチャ演出の有効/無効切り替え ─────────────────────────
+// false にすると豆知識だけが表示され、レア演出は一切発生しない。
+// (演出ロジック自体は下に残したままにしてあるので、true に戻せば復活する)
+const GACHA_ENABLED = false;
+
 // ── 豆知識表示（props なし、親の再レンダリングから完全隔離）────────
 const TriviaDisplay = memo(function TriviaDisplay() {
   const [text,         setText]      = useState(() => pickText());
@@ -171,7 +177,7 @@ const TriviaDisplay = memo(function TriviaDisplay() {
     setVisible(false);
     setTimeout(() => {
       const nextText   = pickText(textRef.current);
-      const nextRarity = rollRarity();
+      const nextRarity = GACHA_ENABLED ? rollRarity() : "normal";
       setText(nextText);
       setTextClass(nextRarity === "sssr" ? "vsm-rainbow-text" : "text-zinc-500");
       setVisible(true);
@@ -198,13 +204,19 @@ const TriviaDisplay = memo(function TriviaDisplay() {
 });
 
 // ── メインコンポーネント ──────────────────────────────────────
-export default function StatusBar({ entries, backendStatus }: Props) {
+export default function StatusBar({ entries, backendStatus, diagLog = [] }: Props) {
   const [time, setTime] = useState(() => new Date().toLocaleTimeString("ja-JP", { hour12: false }));
+  const [showDiag, setShowDiag] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date().toLocaleTimeString("ja-JP", { hour12: false })), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // エラー時は自動で診断ログを開く
+  useEffect(() => {
+    if (backendStatus === "error") setShowDiag(true);
+  }, [backendStatus]);
 
   const total   = entries.length;
   const errored = entries.filter(e => e.error && !e.loading).length;
@@ -214,6 +226,32 @@ export default function StatusBar({ entries, backendStatus }: Props) {
     backendStatus === "error" ? "bg-red-600"    : "bg-amber-500 animate-pulse";
 
   return (
+    <>
+      {/* 診断ログパネル (エラー時に自動展開、クリックでトグル) */}
+      {showDiag && (
+        <div className="bg-zinc-900 border-t border-red-900/60 px-3 py-2 text-[10px] font-mono max-h-40 overflow-y-auto">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-red-400 font-bold tracking-wider">— 診断ログ —</span>
+            <button
+              className="text-zinc-500 hover:text-zinc-300 text-[9px]"
+              onClick={() => setShowDiag(false)}
+            >✕ 閉じる</button>
+          </div>
+          {diagLog.length === 0
+            ? <span className="text-zinc-600">（ログなし）</span>
+            : diagLog.map((line, i) => (
+                <div key={i} className={
+                  line.includes("✓") ? "text-emerald-400" :
+                  line.includes("✗") ? "text-red-400" : "text-zinc-400"
+                }>{line}</div>
+              ))
+          }
+          {errored > 0 && entries.filter(e => e.error).map((e, i) => (
+            <div key={`err-${i}`} className="text-red-400">[ファイル] {e.file?.name}: {e.error}</div>
+          ))}
+        </div>
+      )}
+
     <div className="h-7 shrink-0 bg-zinc-950 border-t border-indigo-950/80 flex items-center relative overflow-hidden select-none">
       {/* スキャンライン */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.025]"
@@ -222,14 +260,18 @@ export default function StatusBar({ entries, backendStatus }: Props) {
       {/* 左端アクセントバー */}
       <div className={`w-0.75 h-full shrink-0 ${statusColor}`} />
 
-      {/* システム状態 */}
-      <span className={`font-mono text-[9px] tracking-[0.15em] font-bold px-3 shrink-0 ${
-        backendStatus === "ready" ? "text-indigo-400" :
-        backendStatus === "error" ? "text-red-400"    : "text-amber-400"
-      }`}>
+      {/* システム状態 (クリックで診断ログ表示) */}
+      <button
+        className={`font-mono text-[9px] tracking-[0.15em] font-bold px-3 shrink-0 cursor-pointer hover:opacity-70 ${
+          backendStatus === "ready" ? "text-indigo-400" :
+          backendStatus === "error" ? "text-red-400"    : "text-amber-400"
+        }`}
+        onClick={() => setShowDiag(v => !v)}
+        title="クリックで診断ログを表示"
+      >
         {backendStatus === "ready" ? "SYS:ONLINE" :
-         backendStatus === "error" ? "SYS:OFFLINE" : "SYS:INIT"}
-      </span>
+         backendStatus === "error" ? "SYS:OFFLINE [診断]" : "SYS:INIT"}
+      </button>
 
       <Pipe />
 
@@ -264,5 +306,6 @@ export default function StatusBar({ entries, backendStatus }: Props) {
       {/* 右端アクセントバー */}
       <div className="w-0.75 h-full shrink-0 bg-indigo-900/60" />
     </div>
+    </>
   );
 }

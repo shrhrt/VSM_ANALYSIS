@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { fetch } from "@tauri-apps/plugin-http";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import "./App.css";
@@ -120,6 +121,7 @@ function App() {
   const [fieldUnit,     setFieldUnit]     = useState<"mT" | "Oe">("mT");
   const [graphSettings, setGraphSettings] = useState<GraphSettings>(DEFAULT_GRAPH);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("starting");
+  const [diagLog,       setDiagLog]       = useState<string[]>([]);
 
   // 欠損ファイルダイアログ用の保留セッション
   const [missingDialog, setMissingDialog] = useState<{
@@ -130,22 +132,41 @@ function App() {
   } | null>(null);
 
   useEffect(() => {
-    invoke("start_backend").catch(() => {});
+    const addLog = (msg: string) => setDiagLog(prev => [...prev, msg]);
+
+    addLog("[1] バックエンド起動コマンド送信...");
+    invoke<string>("start_backend")
+      .then((msg) => addLog(`[1] ✓ ${msg}`))
+      .catch((e)  => addLog(`[1] ✗ 起動失敗: ${e}`));
+
     let fast = true;
+    let attempts = 0;
     const check = async () => {
+      attempts++;
       try {
         const res = await fetch("http://localhost:8000/health");
         if (res.ok) {
+          addLog(`[2] ✓ ヘルスチェック成功 (試行${attempts}回目)`);
           setBackendStatus("ready");
           if (fast) { fast = false; clearInterval(poll); poll = setInterval(check, 5000); }
-        } else throw new Error();
-      } catch {
-        if (!fast) setBackendStatus("error");
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (e) {
+        if (!fast) {
+          addLog(`[2] ✗ ヘルスチェック失敗: ${e}`);
+          setBackendStatus("error");
+        }
       }
     };
     let poll = setInterval(check, 500);
     setTimeout(() => {
-      if (fast) { fast = false; clearInterval(poll); poll = setInterval(check, 5000); }
+      if (fast) {
+        fast = false;
+        addLog(`[2] ✗ 20秒タイムアウト (${attempts}回試行)`);
+        clearInterval(poll);
+        poll = setInterval(check, 5000);
+      }
     }, 20000);
     return () => clearInterval(poll);
   }, []);
@@ -542,7 +563,7 @@ function App() {
             onToggleUnit={() => setFieldUnit((u) => u === "mT" ? "Oe" : "mT")}
             maxHeight={resultsHeight}
           />
-          <StatusBar entries={entries} backendStatus={backendStatus} />
+          <StatusBar entries={entries} backendStatus={backendStatus} diagLog={diagLog} />
         </div>
       </div>
     </div>

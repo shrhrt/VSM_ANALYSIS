@@ -1,5 +1,6 @@
 import { open as tauriOpen } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
+import { fetch } from "@tauri-apps/plugin-http";
 
 const BASE = "http://localhost:8000";
 

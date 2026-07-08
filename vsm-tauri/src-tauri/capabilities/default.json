@@ -19,6 +19,11 @@
     "fs:scope-download-recursive",
     "fs:scope-document-recursive",
     "fs:scope-desktop-recursive",
-    "fs:scope-home-recursive"
+    "fs:scope-home-recursive",
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [{ "url": "http://localhost:8000/**" }]
+    }
   ]
 }

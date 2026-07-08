@@ -811,6 +811,7 @@ function AxisPanel({ g, ch }: { g: GraphSettings; ch: (p: Partial<GraphSettings>
               <span className="text-[10px] text-zinc-600 w-3 shrink-0 text-center">{axis}</span>
               <input type="text" value={g[key]} placeholder={ph}
                 onChange={(e) => ch({ [key]: e.target.value })}
+                title="TeX: $\alpha$ $\mu_0$ など"
                 className="flex-1 bg-zinc-800/80 border border-zinc-700/60 text-zinc-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500/70 placeholder:text-zinc-700"
               />
             </div>

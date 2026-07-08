@@ -65,3 +65,12 @@ Thumbs.db
 *.build/
 *.dist/
 *.cmd
+
+# Tauri サイドカー (build.py で再生成される 72MB のビルド生成物)
+vsm-tauri/src-tauri/binaries/
+
+# Claude Code のローカル設定
+.claude/
+
+# 個人用バックアップ・作業コピー
+その他/

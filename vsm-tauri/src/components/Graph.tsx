@@ -58,8 +58,8 @@ const PAPER_COLORS: Record<PaperColorScheme, string[]> = {
 export default function Graph({ entries, unitMode, graphSettings }: Props) {
   const hasData = entries.some((e) => e.result?.plot);
   const defs    = defaultLabels(unitMode);
-  const xLabel  = graphSettings.xLabelOverride || defs.x;
-  const yLabel  = graphSettings.yLabelOverride || defs.y;
+  const xLabel  = texToDisplay(graphSettings.xLabelOverride || defs.x);
+  const yLabel  = texToDisplay(graphSettings.yLabelOverride || defs.y);
 
   const {
     showLegend, showGrid, showZeroLines,
