@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **VSM Data Analyzer** は、磁性材料の磁気特性測定データ（VSM, PPMS）を解析・可視化するデスクトップアプリ。
 **Tauri v2 (Rust) + React/TypeScript フロントエンド** と **Python (FastAPI) バックエンド** で構成される。
 
-> 注: 旧版は Tkinter 製の単体 GUI (`app/`) だったが、現在は Tauri + FastAPI 構成へ移行済み。
-> `app/` はレガシー（下記「レガシー」参照）。
+> 注: 旧版は Tkinter 製の単体 GUI (`app/`) だったが、現在は Tauri + FastAPI 構成へ完全移行済み。
+> 旧 Tkinter コードは削除済み（必要なら git 履歴で参照できる）。
 
 ## Commands
 
@@ -66,7 +66,6 @@ vsm-tauri/           # Tauri v2 + React/TS フロントエンド
     src/lib.rs       #   Rust: backend.exe サイドカーの起動と、アプリ終了時の kill を管理
 
 tools/dat_to_VSM.py  # PPMS (.dat) → VSM 形式 変換ツール
-app/                 # 【レガシー】旧 Tkinter GUI (下記参照)
 ```
 
 ### データフロー
@@ -74,8 +73,8 @@ app/                 # 【レガシー】旧 Tkinter GUI (下記参照)
 React (Tauri WebView) → `api/client.ts` が HTTP fetch → FastAPI (:8000) →
 `analysis/calculations.py` で計算 → JSON を返す → React が SVG でグラフ描画。
 
-グラフ描画は **フロントエンド (SVG) が担当**。matplotlib はバックエンドのビルドから除外されている
-(`build.py` の `--exclude-module matplotlib`)。requirements.txt の matplotlib は主にレガシー `app/` 用。
+グラフ描画は **フロントエンド (SVG) が担当**。バックエンドは matplotlib を使わない
+(`build.py` でも `--exclude-module matplotlib` で明示的に除外している)。
 
 ### 中心データ構造: 解析結果 (`AnalysisResult`)
 
@@ -123,13 +122,5 @@ React (Tauri WebView) → `api/client.ts` が HTTP fetch → FastAPI (:8000) →
 - `test_calculations.py` — `analysis/calculations.py` の純粋関数を網羅 (Ms/Mr/Hc/Hs, 反磁性補正)。
   **バックエンドの解析ロジックはこの層を再利用するため、実質的に本番の計算経路をカバーしている。**
 - `test_tex_utils.py` — TeX 変換ロジック。
-- `test_sort.py` — 自然順ソート。**現状レガシー `app/vsm_app.py` の `_make_sort_key` に依存**。
 
 FastAPI ルーター層 (HTTP 契約) と React フロントエンドには自動テストなし。
-
-### レガシー: 旧 Tkinter GUI (`app/`)
-
-`app/vsm_app.py` ほかは Tauri 移行前の単体 GUI。現在アプリの起動経路 (`main.py`) からは呼ばれない。
-ただし `test_sort.py` が `app.vsm_app._make_sort_key` を import しているため、まだ完全には削除できない。
-関連するレガシー資産: `build.bat`・`main.spec` (旧 Tkinter アプリのビルド設定)、`locales/`、`assets/`。
-これらを整理・引退させる場合は、依存 (特に `test_sort.py`) の移行を先に行うこと。
