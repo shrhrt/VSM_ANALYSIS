@@ -150,16 +150,28 @@ def calculate_coercivity(
         M_up (Any): 復路の磁化データ。
 
     Returns:
-        Optional[Dict[str, float]]: 'T'と'Oe'をキーとする保磁力の辞書。計算失敗時はNone。
+        Optional[Dict[str, float]]: 保磁力とループ形状に関する辞書。計算失敗時はNone。
+            'T', 'Oe'          : 保磁力 Hc = (|Hc_down| + |Hc_up|) / 2
+            'down_T', 'up_T'   : 各ブランチが M=0 を横切る符号付き磁場 (T)
+            'Heb_T', 'Heb_Oe'  : 交換バイアス磁場（ループの水平シフト）
+                                 Heb = (Hc_down + Hc_up) / 2。対称ループなら 0。
     """
     try:
         Hc_down, Hc_up = (
-            np.interp(0, M_down[::-1], H_down[::-1]),
-            np.interp(0, M_up, H_up),
+            float(np.interp(0, M_down[::-1], H_down[::-1])),
+            float(np.interp(0, M_up, H_up)),
         )
         Hc_avg = (abs(Hc_down) + abs(Hc_up)) / 2
+        Heb = (Hc_down + Hc_up) / 2
         # print(f"  保磁力 Hc: {Hc_avg * 10000:.2f} Oe ({Hc_avg:.4f} T)")
-        return {"T": Hc_avg, "Oe": Hc_avg * 10000}
+        return {
+            "T": Hc_avg,
+            "Oe": Hc_avg * 10000,
+            "down_T": Hc_down,
+            "up_T": Hc_up,
+            "Heb_T": Heb,
+            "Heb_Oe": Heb * 10000,
+        }
     except Exception as e:
         print(f"  エラー: 保磁力の計算失敗: {e}")
         return None

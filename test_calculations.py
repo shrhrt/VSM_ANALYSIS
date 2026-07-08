@@ -56,6 +56,42 @@ def test_calculate_coercivity():
     assert result["Oe"] == 20000.0
 
 
+def test_symmetric_loop_zero_exchange_bias():
+    """対称なループでは交換バイアス(Heb)が 0 になることをテストする"""
+    H_down = np.array([5.0, 2.0, 0.0, -5.0])
+    M_down = np.array([100.0, 0.0, -50.0, -100.0])
+    H_up = np.array([-5.0, -2.0, 0.0, 5.0])
+    M_up = np.array([-100.0, 0.0, 50.0, 100.0])
+
+    result = calculate_coercivity(H_down, M_down, H_up, M_up)
+
+    assert result is not None
+    # 対称なので Heb = (2 + -2)/2 = 0
+    assert result["Heb_T"] == pytest.approx(0.0)
+
+
+def test_calculate_exchange_bias_shifted_loop():
+    """水平にシフトしたループで交換バイアス(Heb)が正しく算出されるかテストする"""
+
+    # 往路は M=0 を H=3 で、復路は M=0 を H=-1 で横切る（+1 方向にシフトしたループ）
+    H_down = np.array([5.0, 3.0, 0.0, -5.0])
+    M_down = np.array([100.0, 0.0, -30.0, -100.0])  # H=3.0 のとき M=0
+    H_up = np.array([-5.0, -1.0, 0.0, 5.0])
+    M_up = np.array([-100.0, 0.0, 40.0, 100.0])     # H=-1.0 のとき M=0
+
+    result = calculate_coercivity(H_down, M_down, H_up, M_up)
+
+    assert result is not None
+    # Hc = (|3| + |-1|)/2 = 2.0（保磁力はシフトの影響を受けない）
+    assert result["T"] == pytest.approx(2.0)
+    # 符号付き交差点
+    assert result["down_T"] == pytest.approx(3.0)
+    assert result["up_T"] == pytest.approx(-1.0)
+    # Heb = (3 + -1)/2 = 1.0（ループ中心のシフト量）
+    assert result["Heb_T"] == pytest.approx(1.0)
+    assert result["Heb_Oe"] == pytest.approx(10000.0)
+
+
 def test_calculate_remanence():
     """残留磁化(Mr)の計算が正しく動作するかテストする"""
 
