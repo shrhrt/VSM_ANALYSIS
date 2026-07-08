@@ -27,9 +27,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
+# PyInstaller (spec は build.py が都度生成する。手書きの追跡は不要)
 *.spec
-!main.spec
 
 # Installer logs
 pip-log.txt

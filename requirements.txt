@@ -1,9 +1,21 @@
+# 解析ロジック (analysis/ ・バックエンドとテストが共用)
 pandas
 numpy
 scipy
-matplotlib
-tkinterdnd2
-sv-ttk
+
+# バックエンド (FastAPI サーバ / backend/)
+fastapi
+uvicorn
+python-multipart
+
+# テスト
 pytest
+
+# 配布ビルド (build.py → PyInstaller で backend.exe 化)
 pyinstaller
 pywin32
+
+# レガシー Tkinter GUI (app/) 用。test_sort.py が app.vsm_app を import するため現状必要
+tkinterdnd2
+sv-ttk
+matplotlib
