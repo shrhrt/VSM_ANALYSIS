@@ -13,7 +13,7 @@ function fmt(v: number | null | undefined, digits: number, scale = 1): string {
   return (v * scale).toFixed(digits);
 }
 
-type SortKey = "name" | "Ms" | "Mr" | "Hc" | "Hs" | "sq";
+type SortKey = "name" | "Ms" | "Mr" | "Hc" | "Hs" | "Heb" | "sq";
 type SortDir = "asc" | "desc";
 
 function getSortVal(e: FileEntry, key: SortKey): string | number | null {
@@ -23,6 +23,7 @@ function getSortVal(e: FileEntry, key: SortKey): string | number | null {
     case "Mr":   return e.result?.Mr        ?? null;
     case "Hc":   return e.result?.Hc_Oe    ?? null;
     case "Hs":   return e.result?.Hs_Oe    ?? null;
+    case "Heb":  return e.result?.Heb_Oe   ?? null;
     case "sq":   return e.result?.squareness ?? null;
   }
 }
@@ -66,20 +67,22 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit, maxHeig
       fmt(e.result?.Mr,  1),
       fmt(e.result?.Hc_Oe, 2, scale),
       fmt(e.result?.Hs_Oe, 2, scale),
+      fmt(e.result?.Heb_Oe, 2, scale),
       fmt(e.result?.squareness, 3),
     ]);
-    const hdrs = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, "Mr/Ms"];
+    const hdrs = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, `Heb (${fieldUnit})`, "Mr/Ms"];
     navigator.clipboard.writeText([hdrs.join("\t"), ...rows.map((r) => r.join("\t"))].join("\n"));
   };
 
   const copyTable = () => {
-    const hdrs = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, "Mr/Ms"];
+    const hdrs = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, `Heb (${fieldUnit})`, "Mr/Ms"];
     const rows = sortedEntries.map((e) => [
       e.legendName || e.file.name,
       fmt(e.result?.Ms,  1),
       fmt(e.result?.Mr,  1),
       fmt(e.result?.Hc_Oe, 2, scale),
       fmt(e.result?.Hs_Oe, 2, scale),
+      fmt(e.result?.Heb_Oe, 2, scale),
       fmt(e.result?.squareness, 3),
     ]);
     const colWidths = hdrs.map((h, ci) => Math.max(h.length, ...rows.map((r) => r[ci].length)));
@@ -91,13 +94,14 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit, maxHeig
   };
 
   const copyHTML = async () => {
-    const hdrs = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, "Mr/Ms"];
+    const hdrs = ["ファイル名", "Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, `Heb (${fieldUnit})`, "Mr/Ms"];
     const rows = sortedEntries.map((e) => [
       e.legendName || e.file.name,
       fmt(e.result?.Ms,  1),
       fmt(e.result?.Mr,  1),
       fmt(e.result?.Hc_Oe, 2, scale),
       fmt(e.result?.Hs_Oe, 2, scale),
+      fmt(e.result?.Heb_Oe, 2, scale),
       fmt(e.result?.squareness, 3),
     ]);
     const thBase = "border:1px solid #bbb;padding:6px 12px;background:#f0f0f0;font-weight:600;white-space:nowrap;";
@@ -162,6 +166,7 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit, maxHeig
             <col style={{ width: 88 }} />     {/* Mr */}
             <col style={{ width: 76 }} />     {/* Hc */}
             <col style={{ width: 88 }} />     {/* Hs */}
+            <col style={{ width: 84 }} />     {/* Heb */}
             <col style={{ width: 64 }} />     {/* Mr/Ms */}
           </colgroup>
           <thead>
@@ -170,8 +175,8 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit, maxHeig
                 className={`${hdrBase} text-left ${sortKey === "name" ? "text-indigo-400" : "text-zinc-500 hover:text-zinc-300"}`}>
                 ファイル名<SortMark col="name" />
               </th>
-              {(["Ms", "Mr", "Hc", "Hs", "sq"] as SortKey[]).map((k, i) => {
-                const labels = ["Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, "Mr/Ms"];
+              {(["Ms", "Mr", "Hc", "Hs", "Heb", "sq"] as SortKey[]).map((k, i) => {
+                const labels = ["Ms (kA/m)", "Mr (kA/m)", `Hc (${fieldUnit})`, `Hs (${fieldUnit})`, `Heb (${fieldUnit})`, "Mr/Ms"];
                 return (
                   <th key={k} onClick={() => handleSort(k)}
                     className={`${hdrBase} text-right ${sortKey === k ? "text-indigo-400" : "text-zinc-500 hover:text-zinc-300"}`}>
@@ -184,7 +189,7 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit, maxHeig
           <tbody>
             {sortedEntries.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-3 text-center text-[10px] text-zinc-600">
+                <td colSpan={7} className="px-3 py-3 text-center text-[10px] text-zinc-600">
                   ファイルを読み込むと解析結果が表示されます
                 </td>
               </tr>
@@ -208,6 +213,7 @@ export default function ResultsTable({ entries, fieldUnit, onToggleUnit, maxHeig
                   <td className="px-2 py-0.5 text-right text-[11px] font-mono text-zinc-300 tabular-nums">{fmt(e.result?.Mr,  1)}</td>
                   <td className="px-2 py-0.5 text-right text-[11px] font-mono text-zinc-300 tabular-nums">{fmt(e.result?.Hc_Oe, 2, scale)}</td>
                   <td className="px-2 py-0.5 text-right text-[11px] font-mono text-zinc-300 tabular-nums">{fmt(e.result?.Hs_Oe, 2, scale)}</td>
+                  <td className="px-2 py-0.5 text-right text-[11px] font-mono text-zinc-300 tabular-nums">{fmt(e.result?.Heb_Oe, 2, scale)}</td>
                   <td className="px-2 py-0.5 text-right text-[11px] font-mono text-zinc-300 tabular-nums">{fmt(e.result?.squareness, 3)}</td>
                 </tr>
               );

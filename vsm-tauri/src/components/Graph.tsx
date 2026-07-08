@@ -1,11 +1,13 @@
 import Plot from "react-plotly.js";
+import type { Data, Layout } from "plotly.js";
 import type { FileEntry, UnitMode, GraphSettings, PaperColorScheme } from "../App";
 import { texToDisplay } from "../utils/texToDisplay";
 
 interface Props {
-  entries:       FileEntry[];
-  unitMode:      UnitMode;
-  graphSettings: GraphSettings;
+  entries:          FileEntry[];
+  unitMode:         UnitMode;
+  graphSettings:    GraphSettings;
+  onToggleExclude?: (entryIndex: number, origIdx: number) => void;
 }
 
 function convertAxes(
@@ -55,7 +57,7 @@ const PAPER_COLORS: Record<PaperColorScheme, string[]> = {
   grayscale: ["#000000", "#555555", "#999999", "#222222", "#777777", "#AAAAAA", "#333333", "#BBBBBB"],
 };
 
-export default function Graph({ entries, unitMode, graphSettings }: Props) {
+export default function Graph({ entries, unitMode, graphSettings, onToggleExclude }: Props) {
   const hasData = entries.some((e) => e.result?.plot);
   const defs    = defaultLabels(unitMode);
   const xLabel  = texToDisplay(graphSettings.xLabelOverride || defs.x);
@@ -73,6 +75,7 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
     zeroLineColor, zeroLineStyle,
     gridColor, gridStyle,
     paperMode, paperColorScheme,
+    showAnnotations,
     marginB, marginL,
   } = graphSettings;
 
@@ -129,30 +132,99 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
     };
   };
 
-  const traces = hasData
-    ? entries.flatMap((e, idx) => {
+  const traces: Data[] = hasData
+    ? entries.flatMap((e, idx): Data[] => {
         if (!e.result?.plot) return [];
-        const { H_down, M_down, H_up, M_up } = e.result.plot;
+        const { H_down, M_down, H_up, M_up, idx_down, idx_up } = e.result.plot;
         const { H, M } = convertAxes(
           [...H_down, ...H_up], [...M_down, ...M_up], e.result.Ms, unitMode
         );
         const color = (paper && paperColorScheme !== "current" && schemeColors.length > 0)
           ? schemeColors[idx % schemeColors.length]
           : e.color;
-        return [{
+        // 各点に [ファイル番号, 元データ行番号] を持たせ、クリックで除外/復帰できるようにする
+        const origIdx = [...(idx_down ?? []), ...(idx_up ?? [])];
+        const customdata = origIdx.length === H.length ? origIdx.map((oi) => [idx, oi]) : undefined;
+        const out: Data[] = [{
           x: H, y: M,
-          type: "scatter" as const,
+          type: "scatter",
           mode: plotMode as "lines" | "lines+markers",
           name: texToDisplay(e.legendName || e.file.name.replace(/\.[^.]+$/, "")),
           line:   { color, width: lineWidth },
           marker: { color, size: markerSize, symbol: e.markerSymbol ?? markerSymbol },
+          ...(customdata ? { customdata } : {}),
         }];
+        // 除外点: 灰色×で表示（クリックで復帰）
+        const exc = e.result.excluded;
+        if (exc && exc.idx.length > 0) {
+          const conv = convertAxes(exc.H, exc.M, e.result.Ms, unitMode);
+          out.push({
+            x: conv.H, y: conv.M,
+            type: "scatter", mode: "markers",
+            name: "除外点", showlegend: false,
+            marker: { color: "#9ca3af", size: Math.max(8, markerSize + 3), symbol: "x", line: { width: 1, color: "#6b7280" } },
+            customdata: exc.idx.map((oi) => [idx, oi]),
+            hovertemplate: "除外点 (クリックで復帰)<extra></extra>",
+          });
+        }
+        return out;
       })
     : [{
         x: [-2, -1, 0, 1, 2], y: [0, 0, 0, 0, 0],
-        type: "scatter" as const, mode: "lines" as const,
+        type: "scatter", mode: "lines",
         name: "（データなし）", line: { color: paper ? "#CCCCCC" : "#3f3f46", width: 1 },
       }];
+
+  // ── 解析注釈オーバーレイ（Ms 準位・Hc/Mr 交点・Hs）─────────────
+  const convHv = (h: number) => (unitMode === "CGS" ? h * 10000 : h);
+  const convMv = (m: number, Ms: number | null | undefined) =>
+    unitMode === "Normalized" ? (Ms ? m / Ms : m) : m;
+
+  const annotTraces: Data[] = [];
+  const annotShapes: NonNullable<Layout["shapes"]> = [];
+  if (showAnnotations && hasData) {
+    entries.forEach((e, idx) => {
+      const a = e.result?.annot;
+      if (!a) return;
+      const Ms = e.result?.Ms;
+      const color = (paper && paperColorScheme !== "current" && schemeColors.length > 0)
+        ? schemeColors[idx % schemeColors.length]
+        : e.color;
+      // Hc 交点 (M=0)
+      const hcX: number[] = [], hcY: number[] = [];
+      if (a.hc_down_T != null) { hcX.push(convHv(a.hc_down_T)); hcY.push(convMv(0, Ms)); }
+      if (a.hc_up_T   != null) { hcX.push(convHv(a.hc_up_T));   hcY.push(convMv(0, Ms)); }
+      if (hcX.length) annotTraces.push({
+        x: hcX, y: hcY, type: "scatter", mode: "markers",
+        name: "Hc", showlegend: false, hoverinfo: "x",
+        marker: { color, size: 12, symbol: "x-thin-open", line: { width: 2, color } },
+      });
+      // Mr 交点 (H=0)
+      if (a.mr != null) annotTraces.push({
+        x: [convHv(0), convHv(0)], y: [convMv(a.mr, Ms), convMv(-a.mr, Ms)],
+        type: "scatter", mode: "markers",
+        name: "Mr", showlegend: false, hoverinfo: "y",
+        marker: { color, size: 9, symbol: "circle-open", line: { width: 2, color } },
+      });
+      // Ms 準位（水平線, プロット全幅）
+      const msLine = (yv: number) => ({
+        type: "line" as const, xref: "paper" as const, x0: 0, x1: 1,
+        yref: "y" as const, y0: yv, y1: yv, layer: "below" as const,
+        line: { color, width: 1, dash: "dot" as const },
+      });
+      if (a.ms_pos != null) annotShapes.push(msLine(convMv(a.ms_pos, Ms)));
+      if (a.ms_neg != null) annotShapes.push(msLine(convMv(-a.ms_neg, Ms)));
+      // Hs（垂直線, プロット全高）
+      const hsLine = (xv: number) => ({
+        type: "line" as const, yref: "paper" as const, y0: 0, y1: 1,
+        xref: "x" as const, x0: xv, x1: xv, layer: "below" as const,
+        line: { color, width: 1, dash: "dash" as const },
+      });
+      if (a.hs_pos_T != null) annotShapes.push(hsLine(convHv(a.hs_pos_T)));
+      if (a.hs_neg_T != null) annotShapes.push(hsLine(-convHv(a.hs_neg_T)));
+    });
+  }
+  const allTraces = [...traces, ...annotTraces];
 
   // 軸共通設定（title/tickfont は個別指定）
   const axisBase = {
@@ -185,7 +257,12 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
         style={paper ? { background: "white", borderRadius: 2, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" } : {}}>
         <Plot
           divId="vsm-main-plot"
-          data={traces}
+          data={allTraces}
+          onClick={(ev) => {
+            const pt = ev.points?.[0] as { customdata?: unknown } | undefined;
+            const cd = pt?.customdata as [number, number] | undefined;
+            if (cd && onToggleExclude) onToggleExclude(cd[0], cd[1]);
+          }}
           layout={{
             paper_bgcolor: theme.paperBg,
             plot_bgcolor:  theme.plotBg,
@@ -221,6 +298,7 @@ export default function Graph({ entries, unitMode, graphSettings }: Props) {
               ...buildMinor(dtickY),
             },
             margin:   { t: 30, r: 40, b: marginB, l: marginL },
+            shapes:   annotShapes,
             autosize: true,
           }}
           useResizeHandler

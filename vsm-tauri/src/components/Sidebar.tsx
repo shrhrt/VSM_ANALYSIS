@@ -366,6 +366,21 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
             </div>
           </div>
 
+          {/* 除外点（グラフ上の点クリックで除外/復帰） */}
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-zinc-500"
+              title="グラフ上のデータ点をクリックすると解析から除外できます（もう一度クリックで復帰）">
+              除外点: {s.excludedIndices?.length ?? 0} 点
+            </span>
+            {(s.excludedIndices?.length ?? 0) > 0 && (
+              <button onClick={() => onCalcChange({ excludedIndices: [] })}
+                className="text-[10px] text-zinc-400 hover:text-zinc-100 bg-zinc-700/50 hover:bg-zinc-700 px-2 py-0.5 rounded transition-colors"
+                title="このファイルの除外点をすべて解除">
+                すべて復帰
+              </button>
+            )}
+          </div>
+
           {/* 反磁性補正 */}
           <div>
             <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">反磁性補正</p>
@@ -699,10 +714,11 @@ function BasicPanel({ g, ch }: { g: GraphSettings; ch: (p: Partial<GraphSettings
       {/* 表示トグル */}
       <div>
         <GLabel>表示</GLabel>
-        <div className="grid grid-cols-3 gap-1">
-          <Pill wide active={g.showLegend}    onClick={() => ch({ showLegend:    !g.showLegend    })}>凡例</Pill>
-          <Pill wide active={g.showGrid}      onClick={() => ch({ showGrid:      !g.showGrid      })}>グリッド</Pill>
-          <Pill wide active={g.showZeroLines} onClick={() => ch({ showZeroLines: !g.showZeroLines })}>原点線</Pill>
+        <div className="grid grid-cols-2 gap-1">
+          <Pill wide active={g.showLegend}      onClick={() => ch({ showLegend:      !g.showLegend      })}>凡例</Pill>
+          <Pill wide active={g.showGrid}        onClick={() => ch({ showGrid:        !g.showGrid        })}>グリッド</Pill>
+          <Pill wide active={g.showZeroLines}   onClick={() => ch({ showZeroLines:   !g.showZeroLines   })}>原点線</Pill>
+          <Pill wide active={g.showAnnotations} onClick={() => ch({ showAnnotations: !g.showAnnotations })}>解析注釈</Pill>
         </div>
       </div>
 

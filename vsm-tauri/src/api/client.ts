@@ -6,6 +6,21 @@ const BASE = "http://localhost:8000";
 
 // ── 型定義 ─────────────────────────────────────────────────────
 
+/** 解析注釈（可視化用。すべて内部単位 T / kA/m） */
+export interface AnalysisAnnotations {
+  hc_down_T:    number | null;   // 往路が M=0 を横切る符号付き磁場
+  hc_up_T:      number | null;   // 復路が M=0 を横切る符号付き磁場
+  mr:           number | null;   // 残留磁化の大きさ (kA/m)
+  ms_pos:       number | null;   // 正側飽和磁化 (kA/m)
+  ms_neg:       number | null;   // 負側飽和磁化の大きさ (kA/m)
+  ms_pos_range: [number, number];// Ms 平均に使った正側の磁場範囲 (T)
+  ms_neg_range: [number, number];// Ms 平均に使った負側の磁場範囲 (T)
+  hs_pos_T:     number | null;
+  hs_neg_T:     number | null;
+  demag_r2_pos: number | null;   // 反磁性フィットの決定係数
+  demag_r2_neg: number | null;
+}
+
 export interface AnalysisResult {
   filename:    string;
   Ms:          number | null;
@@ -13,11 +28,18 @@ export interface AnalysisResult {
   Hc_T:        number | null;
   Hc_Oe:       number | null;
   Hs_Oe:       number | null;
+  Heb_T:       number | null;   // 交換バイアス磁場（ループの水平シフト）
+  Heb_Oe:      number | null;
   squareness:  number | null;
   demag_slope: number;
   logs:        string[];
   metadata:    Record<string, string>;
-  plot: { H_down: number[]; M_down: number[]; H_up: number[]; M_up: number[] };
+  // idx_down/idx_up は各プロット点の「元データ行番号」。除外点のクリック対応に使う
+  plot: { H_down: number[]; M_down: number[]; H_up: number[]; M_up: number[];
+          idx_down?: number[]; idx_up?: number[] };
+  // 除外された点の座標（補正後）と元行番号。灰色×で表示する
+  excluded?: { H: number[]; M: number[]; idx: number[] };
+  annot?: AnalysisAnnotations;
 }
 
 export interface AnalysisParams {
@@ -44,6 +66,8 @@ export interface FileCalcSettings {
   msNegMin?:        number;
   msNegMax?:        number;
   msLinkRanges?:    boolean;
+  // 除外点: 元データの行番号リスト。全計算から除外する
+  excludedIndices?: number[];
 }
 
 /** ファイルパスと File オブジェクトのペア（Tauri ダイアログ経由で開いたファイル） */
@@ -109,6 +133,7 @@ export async function analyzeFile(
   form.append("ms_neg_min",         String(s.msNegMin     ?? -2.0));
   form.append("ms_neg_max",         String(s.msNegMax     ?? -0.5));
   form.append("ms_link_ranges",     String(s.msLinkRanges ?? true));
+  form.append("excluded_indices",   JSON.stringify(s.excludedIndices ?? []));
 
   const res = await fetch(`${BASE}/api/analyze`, { method: "POST", body: form });
   if (!res.ok) {

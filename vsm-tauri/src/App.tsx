@@ -63,6 +63,8 @@ export type GraphSettings = {
   // 論文モード
   paperMode:        boolean;
   paperColorScheme: PaperColorScheme;
+  // 解析注釈オーバーレイ (Ms 準位・Hc/Mr 交点・Hs をグラフに重ねる)
+  showAnnotations:  boolean;
   // 軸ラベル余白 (Plotly margin.b / margin.l)
   marginB: number;
   marginL: number;
@@ -111,6 +113,7 @@ const DEFAULT_GRAPH: GraphSettings = {
   zeroLineColor: "grey", zeroLineStyle: "dot",
   gridColor: "#CCCCCC", gridStyle: "dot",
   paperMode: true, paperColorScheme: "current",
+  showAnnotations: false,
   marginB: 70, marginL: 90,
 };
 
@@ -238,6 +241,28 @@ function App() {
   const updateEntryDisplay = useCallback((index: number, patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => {
     setEntries((prev) => prev.map((e, i) => i === index ? { ...e, ...patch } : e));
   }, []);
+
+  // グラフ上のクリックで除外点をトグル（元データ行番号ベース）→ 再解析
+  const toggleExclude = useCallback((index: number, origIdx: number) => {
+    setEntries((prev) => {
+      const target = prev[index];
+      if (!target) return prev;
+      const cur = target.calcSettings?.excludedIndices ?? [];
+      const nextList = cur.includes(origIdx)
+        ? cur.filter((i) => i !== origIdx)
+        : [...cur, origIdx];
+      const next = prev.map((e, i) =>
+        i === index
+          ? { ...e, calcSettings: { ...e.calcSettings, excludedIndices: nextList }, loading: true }
+          : e
+      );
+      const entry = next[index];
+      analyzeFile(entry.file, params, entry.calcSettings)
+        .then((r) => setEntries((c) => c.map((e, i) => i === index ? { ...e, result: r, error: null, loading: false } : e)))
+        .catch((err: Error) => setEntries((c) => c.map((e, i) => i === index ? { ...e, result: null, error: err.message, loading: false } : e)));
+      return next;
+    });
+  }, [params]);
 
   const removeEntry  = useCallback((i: number) => setEntries((p) => p.filter((_, j) => j !== i)), []);
 
@@ -545,7 +570,7 @@ function App() {
 
         {/* グラフ・結果エリア */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          <Graph entries={entries} unitMode={unitMode} graphSettings={graphSettings} />
+          <Graph entries={entries} unitMode={unitMode} graphSettings={graphSettings} onToggleExclude={toggleExclude} />
           {/* 解析結果パネル縦リサイズハンドル */}
           <div
             className="group h-2 shrink-0 cursor-row-resize flex items-center justify-center bg-zinc-900 hover:bg-indigo-950/80 transition-colors"
