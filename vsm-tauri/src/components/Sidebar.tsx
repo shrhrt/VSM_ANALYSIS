@@ -395,14 +395,8 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
           </div>
 
           {/* 反対称化 */}
-          <div>
-            <Toggle label="反対称化" checked={s.antisymmetrize ?? false}
-              onChange={(v) => onCalcChange({ antisymmetrize: v })} />
-            <p className="text-[10px] text-zinc-600 -mt-1 leading-snug">
-              往路/復路を原点対称に補正し偶成分(定数オフセット等)を除去。
-              <span className="text-amber-600/90">交換バイアス試料には非推奨(Hebが0になります)。</span>
-            </p>
-          </div>
+          <Toggle label="反対称化" checked={s.antisymmetrize ?? false}
+            onChange={(v) => onCalcChange({ antisymmetrize: v })} />
 
           {/* 反磁性補正 */}
           <div>
