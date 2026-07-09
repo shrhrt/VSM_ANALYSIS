@@ -75,7 +75,7 @@ export default function Graph({ entries, unitMode, graphSettings, onToggleExclud
     zeroLineColor, zeroLineStyle,
     gridColor, gridStyle,
     paperMode, paperColorScheme,
-    showAnnotations, showExcluded,
+    showExcluded,
     marginB, marginL,
   } = graphSettings;
 
@@ -175,21 +175,41 @@ export default function Graph({ entries, unitMode, graphSettings, onToggleExclud
         name: "（データなし）", line: { color: paper ? "#CCCCCC" : "#3f3f46", width: 1 },
       }];
 
-  // ── 解析注釈オーバーレイ（Ms 準位・Hc/Mr 交点・Hs）─────────────
+  // ── 解析注釈オーバーレイ（Ms 準位・Hc/Mr 交点・Hs + 物性値ラベル）──
+  // ファイルごとに e.showAnnot が true のものだけ描画する
   const convHv = (h: number) => (unitMode === "CGS" ? h * 10000 : h);
   const convMv = (m: number, Ms: number | null | undefined) =>
     unitMode === "Normalized" ? (Ms ? m / Ms : m) : m;
+  const labelBg = paper ? "rgba(255,255,255,0.80)" : "rgba(24,24,27,0.80)";
 
   const annotTraces: Data[] = [];
   const annotShapes: NonNullable<Layout["shapes"]> = [];
-  if (showAnnotations && hasData) {
+  const annotLabels: NonNullable<Layout["annotations"]> = [];
+  if (hasData) {
     entries.forEach((e, idx) => {
+      if (!e.showAnnot) return;
       const a = e.result?.annot;
-      if (!a) return;
-      const Ms = e.result?.Ms;
+      if (!a || !e.result) return;
+      const r = e.result;
+      const Ms = r.Ms;
       const color = (paper && paperColorScheme !== "current" && schemeColors.length > 0)
         ? schemeColors[idx % schemeColors.length]
         : e.color;
+
+      // 物性値のテキストラベル
+      const mkLabel = (
+        x: number, y: number, text: string,
+        xref: "x" | "paper", yref: "y" | "paper",
+        xanchor: "left" | "center" | "right",
+        yanchor: "top" | "middle" | "bottom",
+        xshift = 0, yshift = 0,
+      ) => annotLabels.push({
+        x, y, text, xref, yref, xanchor, yanchor, xshift, yshift,
+        showarrow: false,
+        font: { color, size: 11, family: theme.fontFamily },
+        bgcolor: labelBg, borderpad: 2,
+      });
+
       // Hc 交点 (M=0)
       const hcX: number[] = [], hcY: number[] = [];
       if (a.hc_down_T != null) { hcX.push(convHv(a.hc_down_T)); hcY.push(convMv(0, Ms)); }
@@ -222,6 +242,18 @@ export default function Graph({ entries, unitMode, graphSettings, onToggleExclud
       });
       if (a.hs_pos_T != null) annotShapes.push(hsLine(convHv(a.hs_pos_T)));
       if (a.hs_neg_T != null) annotShapes.push(hsLine(-convHv(a.hs_neg_T)));
+
+      // ── 物性値ラベル（適切な位置へ配置）──
+      if (r.Ms != null && a.ms_pos != null)
+        mkLabel(0.99, convMv(a.ms_pos, Ms), `Ms ${Math.round(r.Ms)}`, "paper", "y", "right", "bottom", 0, -1);
+      if (r.Mr != null && a.mr != null)
+        mkLabel(convHv(0), convMv(a.mr, Ms), `Mr ${Math.round(r.Mr)}`, "x", "y", "left", "bottom", 4, -1);
+      if (r.Hc_T != null)
+        mkLabel(convHv(r.Hc_T), convMv(0, Ms), `Hc ${(r.Hc_T * 1000).toFixed(1)}mT`, "x", "y", "center", "top", 0, -3);
+      if (r.Hs_Oe != null && a.hs_pos_T != null)
+        mkLabel(convHv(a.hs_pos_T), 0.99, `Hs ${(r.Hs_Oe * 0.1).toFixed(0)}mT`, "x", "paper", "left", "top", 3, 0);
+      if (r.Heb_T != null)
+        mkLabel(0.5, 0.02, `Heb ${(r.Heb_T * 1000).toFixed(1)}mT`, "paper", "paper", "center", "bottom");
     });
   }
   const allTraces = [...traces, ...annotTraces];
@@ -297,9 +329,10 @@ export default function Graph({ entries, unitMode, graphSettings, onToggleExclud
               ...axisBase,
               ...buildMinor(dtickY),
             },
-            margin:   { t: 30, r: 40, b: marginB, l: marginL },
-            shapes:   annotShapes,
-            autosize: true,
+            margin:      { t: 30, r: 40, b: marginB, l: marginL },
+            shapes:      annotShapes,
+            annotations: annotLabels,
+            autosize:    true,
           }}
           useResizeHandler
           style={{ width: "100%", height: "100%" }}

@@ -20,7 +20,7 @@ interface Props {
   onParamsChange:        (next: Partial<AnalysisParams>) => void;
   onUnitModeChange:      (mode: UnitMode) => void;
   onGraphSettingsChange: (next: Partial<GraphSettings>) => void;
-  onEntryDisplayChange:  (index: number, patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => void;
+  onEntryDisplayChange:  (index: number, patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol" | "showAnnot">>) => void;
   onEntryCalcChange:     (index: number, patch: Partial<FileCalcSettings>) => void;
   onEntryRemove:         (index: number) => void;
   onEntryMove:           (from: number, to: number) => void;
@@ -226,7 +226,7 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
   index:          number;
   total:          number;
   params:         AnalysisParams;
-  onDisplayChange: (patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => void;
+  onDisplayChange: (patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol" | "showAnnot">>) => void;
   onCalcChange:   (patch: Partial<FileCalcSettings>) => void;
   onRemove:       () => void;
   onMove:         (dir: -1 | 1) => void;
@@ -300,6 +300,19 @@ function FileEntryItem({ entry, index, total, params, onDisplayChange, onCalcCha
           entry.loading ? "bg-yellow-500 animate-pulse" :
           entry.error   ? "bg-red-500" : "bg-emerald-500"
         }`} title={entry.error ?? (entry.loading ? "解析中" : "完了")} />
+
+        {/* 解析注釈トグル: このファイルの物性値(Ms/Hc/Mr/Hs/Heb)をグラフに注釈表示 */}
+        <button onClick={() => onDisplayChange({ showAnnot: !entry.showAnnot })}
+          className={`shrink-0 w-6 h-6 flex items-center justify-center rounded transition-colors ${
+            entry.showAnnot
+              ? "text-indigo-300 bg-indigo-700/50 ring-1 ring-inset ring-indigo-600/50"
+              : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700"
+          }`} title="このファイルの物性値(Ms/Hc/Mr/Hs)をグラフに注釈表示">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="8" cy="8" r="3.5" />
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2" strokeLinecap="round" />
+          </svg>
+        </button>
 
         {/* 設定展開ボタン */}
         <button onClick={() => setExpanded((v) => !v)}
@@ -466,7 +479,7 @@ function AnalysisTab({ entries, params, unitMode, onLoadFiles, onAddFiles, onCle
   entries: FileEntry[]; params: AnalysisParams; unitMode: UnitMode;
   onLoadFiles: (f: FileWithPath[]) => void; onAddFiles: (f: FileWithPath[]) => void; onClearAll: () => void;
   onParamsChange: (n: Partial<AnalysisParams>) => void; onUnitModeChange: (m: UnitMode) => void;
-  onEntryDisplayChange: (i: number, p: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => void;
+  onEntryDisplayChange: (i: number, p: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol" | "showAnnot">>) => void;
   onEntryCalcChange: (i: number, p: Partial<FileCalcSettings>) => void;
   onEntryRemove: (i: number) => void;
   onEntryMove: (from: number, to: number) => void;
@@ -711,24 +724,15 @@ function BasicPanel({ g, ch }: { g: GraphSettings; ch: (p: Partial<GraphSettings
         )}
       </div>
 
-      {/* 表示トグル: 装飾要素(3列) と 解析オーバーレイ(2列) に分けて偶数配置にする */}
-      <div className="space-y-2.5">
-        <div>
-          <GLabel>表示要素</GLabel>
-          <div className="grid grid-cols-3 gap-1">
-            <Pill wide active={g.showLegend}    onClick={() => ch({ showLegend:    !g.showLegend    })}>凡例</Pill>
-            <Pill wide active={g.showGrid}      onClick={() => ch({ showGrid:      !g.showGrid      })}>グリッド</Pill>
-            <Pill wide active={g.showZeroLines} onClick={() => ch({ showZeroLines: !g.showZeroLines })}>原点線</Pill>
-          </div>
-        </div>
-        <div>
-          <GLabel>解析オーバーレイ</GLabel>
-          <div className="grid grid-cols-2 gap-1">
-            <Pill wide active={g.showAnnotations} onClick={() => ch({ showAnnotations: !g.showAnnotations })}
-              title="Ms 準位・Hc/Mr 交点・Hs をグラフに重ねて表示します">解析注釈</Pill>
-            <Pill wide active={g.showExcluded}    onClick={() => ch({ showExcluded:    !g.showExcluded    })}
-              title="OFFで除外点（灰色×）を画面・画像出力の両方から非表示にします">除外点</Pill>
-          </div>
+      {/* 表示トグル（4項目・2×2）。解析注釈はファイル一覧の各行で個別に切り替える */}
+      <div>
+        <GLabel>表示</GLabel>
+        <div className="grid grid-cols-2 gap-1">
+          <Pill wide active={g.showLegend}    onClick={() => ch({ showLegend:    !g.showLegend    })}>凡例</Pill>
+          <Pill wide active={g.showGrid}      onClick={() => ch({ showGrid:      !g.showGrid      })}>グリッド</Pill>
+          <Pill wide active={g.showZeroLines} onClick={() => ch({ showZeroLines: !g.showZeroLines })}>原点線</Pill>
+          <Pill wide active={g.showExcluded}  onClick={() => ch({ showExcluded:  !g.showExcluded  })}
+            title="OFFで除外点（灰色×）を画面・画像出力の両方から非表示にします">除外点</Pill>
         </div>
       </div>
 

@@ -26,6 +26,7 @@ export type FileEntry = {
   legendName?:   string;
   markerSymbol?: string;
   calcSettings?: FileCalcSettings;
+  showAnnot?:    boolean;   // このファイルの物性値(Ms/Hc/Mr/Hs/Heb)をグラフに注釈表示するか
 };
 
 export type UnitMode = "SI" | "CGS" | "Normalized";
@@ -63,8 +64,6 @@ export type GraphSettings = {
   // 論文モード
   paperMode:        boolean;
   paperColorScheme: PaperColorScheme;
-  // 解析注釈オーバーレイ (Ms 準位・Hc/Mr 交点・Hs をグラフに重ねる)
-  showAnnotations:  boolean;
   // 除外点（灰色×）の表示。OFFで画面・エクスポート両方から消える
   showExcluded:     boolean;
   // 軸ラベル余白 (Plotly margin.b / margin.l)
@@ -80,10 +79,12 @@ export const FILE_COLORS = [
 // セッションファイルの内部型 (バージョン問わず共通)
 type SessionEntryV1 = {
   filename: string; color: string; legendName?: string; markerSymbol?: string;
+  showAnnot?: boolean;
   calcSettings?: FileCalcSettings; fileData: string;
 };
 type SessionEntryV2 = {
   filename: string; color: string; legendName?: string; markerSymbol?: string;
+  showAnnot?: boolean;
   calcSettings?: FileCalcSettings;
   absolutePath: string; relativePath: string; onedrivePath: string;
 };
@@ -115,7 +116,6 @@ const DEFAULT_GRAPH: GraphSettings = {
   zeroLineColor: "grey", zeroLineStyle: "dot",
   gridColor: "#CCCCCC", gridStyle: "dot",
   paperMode: true, paperColorScheme: "current",
-  showAnnotations: false,
   showExcluded: true,
   marginB: 70, marginL: 90,
 };
@@ -241,7 +241,7 @@ function App() {
     });
   }, [params]);
 
-  const updateEntryDisplay = useCallback((index: number, patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol">>) => {
+  const updateEntryDisplay = useCallback((index: number, patch: Partial<Pick<FileEntry, "legendName" | "color" | "markerSymbol" | "showAnnot">>) => {
     setEntries((prev) => prev.map((e, i) => i === index ? { ...e, ...patch } : e));
   }, []);
 
@@ -330,6 +330,7 @@ function App() {
         color:        e.color,
         legendName:   e.legendName,
         markerSymbol: e.markerSymbol,
+        showAnnot:    e.showAnnot,
         calcSettings: e.calcSettings,
       };
     });
@@ -360,6 +361,7 @@ function App() {
           color:        e.color ?? FILE_COLORS[i % FILE_COLORS.length],
           legendName:   e.legendName,
           markerSymbol: e.markerSymbol,
+          showAnnot:    e.showAnnot,
           calcSettings: e.calcSettings,
         };
       })
@@ -394,6 +396,7 @@ function App() {
         color:        e.color ?? FILE_COLORS[i % FILE_COLORS.length],
         legendName:   e.legendName,
         markerSymbol: e.markerSymbol,
+        showAnnot:    e.showAnnot,
         calcSettings: e.calcSettings,
       };
     });
