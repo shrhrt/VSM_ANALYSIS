@@ -711,16 +711,24 @@ function BasicPanel({ g, ch }: { g: GraphSettings; ch: (p: Partial<GraphSettings
         )}
       </div>
 
-      {/* 表示トグル */}
-      <div>
-        <GLabel>表示</GLabel>
-        <div className="grid grid-cols-2 gap-1">
-          <Pill wide active={g.showLegend}      onClick={() => ch({ showLegend:      !g.showLegend      })}>凡例</Pill>
-          <Pill wide active={g.showGrid}        onClick={() => ch({ showGrid:        !g.showGrid        })}>グリッド</Pill>
-          <Pill wide active={g.showZeroLines}   onClick={() => ch({ showZeroLines:   !g.showZeroLines   })}>原点線</Pill>
-          <Pill wide active={g.showAnnotations} onClick={() => ch({ showAnnotations: !g.showAnnotations })}>解析注釈</Pill>
-          <Pill wide active={g.showExcluded}    onClick={() => ch({ showExcluded:    !g.showExcluded    })}
-            title="OFFで除外点（灰色×）を画面・画像出力の両方から非表示にします">除外点</Pill>
+      {/* 表示トグル: 装飾要素(3列) と 解析オーバーレイ(2列) に分けて偶数配置にする */}
+      <div className="space-y-2.5">
+        <div>
+          <GLabel>表示要素</GLabel>
+          <div className="grid grid-cols-3 gap-1">
+            <Pill wide active={g.showLegend}    onClick={() => ch({ showLegend:    !g.showLegend    })}>凡例</Pill>
+            <Pill wide active={g.showGrid}      onClick={() => ch({ showGrid:      !g.showGrid      })}>グリッド</Pill>
+            <Pill wide active={g.showZeroLines} onClick={() => ch({ showZeroLines: !g.showZeroLines })}>原点線</Pill>
+          </div>
+        </div>
+        <div>
+          <GLabel>解析オーバーレイ</GLabel>
+          <div className="grid grid-cols-2 gap-1">
+            <Pill wide active={g.showAnnotations} onClick={() => ch({ showAnnotations: !g.showAnnotations })}
+              title="Ms 準位・Hc/Mr 交点・Hs をグラフに重ねて表示します">解析注釈</Pill>
+            <Pill wide active={g.showExcluded}    onClick={() => ch({ showExcluded:    !g.showExcluded    })}
+              title="OFFで除外点（灰色×）を画面・画像出力の両方から非表示にします">除外点</Pill>
+          </div>
         </div>
       </div>
 
