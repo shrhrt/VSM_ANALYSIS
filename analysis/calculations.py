@@ -109,6 +109,52 @@ def find_demag_slope_manual(
         return 0, 0, 0
 
 
+def antisymmetrize_loop(
+    H_down: Any, M_down: Any, H_up: Any, M_up: Any
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    M-H ループを反対称化し、原点対称 M_down(H) = -M_up(-H) を厳密に満たすよう補正します。
+
+    磁場に対して偶な成分（定数オフセットや偶な背景などの測定アーティファクト）を除去します。
+    強磁性ループ本体や反磁性の傾き（いずれも奇成分）は保存されます。
+
+    式:
+        M_down_as(H) = ( M_down(H) - M_up(-H) ) / 2
+        M_up_as(H)   = ( M_up(H)   - M_down(-H) ) / 2
+    反対の枝の -H での値は線形補間で求めます。
+
+    注意: 原点対称を強制するため、交換バイアス（ループの水平シフト）も 0 になります。
+          交換バイアス試料には適用しないでください。
+
+    Args:
+        H_down: 往路（降磁場）の磁場データ。
+        M_down: 往路の磁化データ。
+        H_up:   復路（昇磁場）の磁場データ。
+        M_up:   復路の磁化データ。
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: 反対称化後の (M_down_as, M_up_as)。
+    """
+    H_down = np.asarray(H_down, dtype=float)
+    M_down = np.asarray(M_down, dtype=float)
+    H_up = np.asarray(H_up, dtype=float)
+    M_up = np.asarray(M_up, dtype=float)
+
+    # np.interp は x が昇順である必要があるため、各枝を H 昇順に並べ替えてから補間する
+    du = np.argsort(H_up)
+    dd = np.argsort(H_down)
+
+    def M_up_at(x):
+        return np.interp(x, H_up[du], M_up[du])
+
+    def M_down_at(x):
+        return np.interp(x, H_down[dd], M_down[dd])
+
+    M_down_as = (M_down - M_up_at(-H_down)) / 2.0
+    M_up_as = (M_up - M_down_at(-H_up)) / 2.0
+    return M_down_as, M_up_as
+
+
 def calculate_remanence(
     H_down: Any, M_down: Any, H_up: Any, M_up: Any
 ) -> Optional[float]:

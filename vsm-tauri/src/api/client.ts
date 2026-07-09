@@ -68,6 +68,8 @@ export interface FileCalcSettings {
   msLinkRanges?:    boolean;
   // 除外点: 元データの行番号リスト。全計算から除外する
   excludedIndices?: number[];
+  // 反対称化: 往路/復路を原点対称に補正し、磁場に偶な成分（定数オフセット等）を除去
+  antisymmetrize?:  boolean;
 }
 
 /** ファイルパスと File オブジェクトのペア（Tauri ダイアログ経由で開いたファイル） */
@@ -134,6 +136,7 @@ export async function analyzeFile(
   form.append("ms_neg_max",         String(s.msNegMax     ?? -0.5));
   form.append("ms_link_ranges",     String(s.msLinkRanges ?? true));
   form.append("excluded_indices",   JSON.stringify(s.excludedIndices ?? []));
+  form.append("antisymmetrize",      String(s.antisymmetrize ?? false));
 
   const res = await fetch(`${BASE}/api/analyze`, { method: "POST", body: form });
   if (!res.ok) {

@@ -43,6 +43,8 @@ async def analyze_file(
     ms_link_ranges: bool = Form(True),
     # 除外点: 元データの行番号の JSON 配列（例: "[3, 17, 42]"）。該当点を全計算から除外する
     excluded_indices: str = Form(""),
+    # 反対称化: ONで往路/復路を原点対称に補正し、磁場に偶な成分（定数オフセット等）を除去
+    antisymmetrize: bool = Form(False),
 ):
     suffix = Path(file.filename or "data.VSM").suffix
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -84,6 +86,7 @@ async def analyze_file(
                 ms_pos_range=(ms_pos_min, ms_pos_max),
                 ms_neg_range=(ms_neg_min, ms_neg_max),
                 excluded_set=excluded_set,
+                antisymmetrize=antisymmetrize,
             )
 
         result["filename"] = file.filename
@@ -102,6 +105,7 @@ def _run_analysis(
     hs_tolerance, hs_min_consecutive,
     ms_manual, ms_pos_range, ms_neg_range,
     excluded_set=None,
+    antisymmetrize=False,
 ):
     vol_cm3 = area * 1e-2 * thickness * 1e-7
     if vol_cm3 <= 0:
@@ -172,6 +176,13 @@ def _run_analysis(
     H_up,   M_up   = H_loop[split:],       M_corrected[split:]
     idx_down = idx_loop[: split + 1]
     idx_up   = idx_loop[split:]
+
+    # 反対称化（ONなら往路/復路を原点対称に補正し、磁場に偶な成分を除去）。
+    # 枝を補正したうえで全ループ配列 M_corrected も再構築し、Ms 等の計算と整合させる。
+    if antisymmetrize:
+        M_down, M_up = vsm_logic.antisymmetrize_loop(H_down, M_down, H_up, M_up)
+        M_corrected = np.concatenate([M_down, M_up[1:]])
+        print("  反対称化: 適用（偶成分を除去。交換バイアスは0になります）")
 
     # Ms計算（可視化用に使用した磁場範囲も記録）
     if ms_manual:

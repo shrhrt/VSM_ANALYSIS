@@ -9,6 +9,7 @@ from analysis.calculations import (
     calculate_remanence,
     find_demag_slope_auto,
     find_demag_slope_manual,
+    antisymmetrize_loop,
 )
 
 
@@ -90,6 +91,43 @@ def test_calculate_exchange_bias_shifted_loop():
     # Heb = (3 + -1)/2 = 1.0（ループ中心のシフト量）
     assert result["Heb_T"] == pytest.approx(1.0)
     assert result["Heb_Oe"] == pytest.approx(10000.0)
+
+
+def test_antisymmetrize_removes_constant_offset():
+    """反対称化が定数オフセットを除去し、原点対称を満たすことをテストする"""
+
+    # 原点対称な理想ループを作る。H_up[i] = -H_down[i] のとき、
+    # 対称条件 M_down(H) = -M_up(-H) は M_up = -M_down（同一インデックス）と等価。
+    H_down = np.array([2.0, 1.0, 0.0, -1.0, -2.0])   # 降磁場: +2 → -2
+    H_up = -H_down                                    # 昇磁場: -2 → +2
+    M_down = np.array([100.0, 60.0, 20.0, -40.0, -90.0])
+    M_up = -M_down                                    # 理想の上昇枝
+
+    # 定数オフセット C を両枝に加える（偶成分アーティファクト）
+    C = 15.0
+    M_down_as, M_up_as = antisymmetrize_loop(H_down, M_down + C, H_up, M_up + C)
+
+    # オフセットが除去され、元の理想データに戻るはず
+    assert np.allclose(M_down_as, M_down, atol=1e-9)
+    assert np.allclose(M_up_as, M_up, atol=1e-9)
+
+
+def test_antisymmetrize_enforces_point_symmetry():
+    """反対称化後は M_down(H) = -M_up(-H) が厳密に成立することをテストする"""
+
+    H_down = np.linspace(2.0, -2.0, 21)
+    H_up = np.linspace(-2.0, 2.0, 21)
+    # わざと非対称なノイズ・オフセットを混ぜたループ
+    M_down = 80.0 * np.tanh(H_down * 2) + 5.0 + 0.5 * H_down**2  # 偶成分(定数+H^2)を混入
+    M_up = 80.0 * np.tanh(H_up * 2) - 3.0 + 0.5 * H_up**2
+
+    M_down_as, M_up_as = antisymmetrize_loop(H_down, M_down, H_up, M_up)
+
+    # M_down_as(H) と -M_up_as(-H) が一致するか（-H_down = H_up の順序で比較）
+    # M_up_as を H 昇順にして -H_down 位置で補間
+    order = np.argsort(H_up)
+    mirror = np.interp(-H_down, H_up[order], M_up_as[order])
+    assert np.allclose(M_down_as, -mirror, atol=1e-9)
 
 
 def test_calculate_remanence():
