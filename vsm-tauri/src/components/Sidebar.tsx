@@ -559,11 +559,11 @@ function GLabel({ children }: { children: React.ReactNode }) {
   return <p className="text-[9px] font-bold text-zinc-600 tracking-widest uppercase mb-1.5">{children}</p>;
 }
 
-function Pill({ active, onClick, children, wide }: {
-  active: boolean; onClick: () => void; children: React.ReactNode; wide?: boolean;
+function Pill({ active, onClick, children, wide, title }: {
+  active: boolean; onClick: () => void; children: React.ReactNode; wide?: boolean; title?: string;
 }) {
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} title={title}
       className={`${wide ? "flex-1" : ""} px-2 py-1.5 text-[11px] font-medium rounded transition-colors ${
         active
           ? "bg-indigo-700/50 text-indigo-200 ring-1 ring-inset ring-indigo-600/50"
@@ -719,6 +719,8 @@ function BasicPanel({ g, ch }: { g: GraphSettings; ch: (p: Partial<GraphSettings
           <Pill wide active={g.showGrid}        onClick={() => ch({ showGrid:        !g.showGrid        })}>グリッド</Pill>
           <Pill wide active={g.showZeroLines}   onClick={() => ch({ showZeroLines:   !g.showZeroLines   })}>原点線</Pill>
           <Pill wide active={g.showAnnotations} onClick={() => ch({ showAnnotations: !g.showAnnotations })}>解析注釈</Pill>
+          <Pill wide active={g.showExcluded}    onClick={() => ch({ showExcluded:    !g.showExcluded    })}
+            title="OFFで除外点（灰色×）を画面・画像出力の両方から非表示にします">除外点</Pill>
         </div>
       </div>
 

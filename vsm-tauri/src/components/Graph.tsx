@@ -75,7 +75,7 @@ export default function Graph({ entries, unitMode, graphSettings, onToggleExclud
     zeroLineColor, zeroLineStyle,
     gridColor, gridStyle,
     paperMode, paperColorScheme,
-    showAnnotations,
+    showAnnotations, showExcluded,
     marginB, marginL,
   } = graphSettings;
 
@@ -154,9 +154,9 @@ export default function Graph({ entries, unitMode, graphSettings, onToggleExclud
           marker: { color, size: markerSize, symbol: e.markerSymbol ?? markerSymbol },
           ...(customdata ? { customdata } : {}),
         }];
-        // 除外点: 灰色×で表示（クリックで復帰）
+        // 除外点: 灰色×で表示（クリックで復帰）。showExcluded=false なら画面・エクスポート共に非表示
         const exc = e.result.excluded;
-        if (exc && exc.idx.length > 0) {
+        if (exc && exc.idx.length > 0 && showExcluded) {
           const conv = convertAxes(exc.H, exc.M, e.result.Ms, unitMode);
           out.push({
             x: conv.H, y: conv.M,

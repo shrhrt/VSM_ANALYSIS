@@ -65,6 +65,8 @@ export type GraphSettings = {
   paperColorScheme: PaperColorScheme;
   // 解析注釈オーバーレイ (Ms 準位・Hc/Mr 交点・Hs をグラフに重ねる)
   showAnnotations:  boolean;
+  // 除外点（灰色×）の表示。OFFで画面・エクスポート両方から消える
+  showExcluded:     boolean;
   // 軸ラベル余白 (Plotly margin.b / margin.l)
   marginB: number;
   marginL: number;
@@ -114,6 +116,7 @@ const DEFAULT_GRAPH: GraphSettings = {
   gridColor: "#CCCCCC", gridStyle: "dot",
   paperMode: true, paperColorScheme: "current",
   showAnnotations: false,
+  showExcluded: true,
   marginB: 70, marginL: 90,
 };
 
@@ -363,7 +366,8 @@ function App() {
     );
     const rp: AnalysisParams = session.params;
     setParams(rp);
-    setGraphSettings(session.graphSettings ?? DEFAULT_GRAPH);
+    // 古いセッションファイルに無い新設項目は DEFAULT_GRAPH の値で補完する
+    setGraphSettings({ ...DEFAULT_GRAPH, ...(session.graphSettings ?? {}) });
     setUnitMode((session.unitMode as UnitMode) ?? "SI");
     setFieldUnit((session.fieldUnit as "mT" | "Oe") ?? "mT");
     setEntries(restoredEntries);
@@ -395,7 +399,8 @@ function App() {
     });
     const rp: AnalysisParams = session.params;
     setParams(rp);
-    setGraphSettings(session.graphSettings ?? DEFAULT_GRAPH);
+    // 古いセッションファイルに無い新設項目は DEFAULT_GRAPH の値で補完する
+    setGraphSettings({ ...DEFAULT_GRAPH, ...(session.graphSettings ?? {}) });
     setUnitMode((session.unitMode as UnitMode) ?? "SI");
     setFieldUnit((session.fieldUnit as "mT" | "Oe") ?? "mT");
     setEntries(restoredEntries);
